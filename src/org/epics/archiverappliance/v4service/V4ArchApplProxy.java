@@ -33,6 +33,7 @@ import org.epics.pvdata.pv.Field;
 import org.epics.pvdata.pv.FieldCreate;
 import org.epics.pvdata.pv.PVDoubleArray;
 import org.epics.pvdata.pv.PVIntArray;
+import org.epics.pvdata.pv.PVLongArray;
 import org.epics.pvdata.pv.PVStringArray;
 import org.epics.pvdata.pv.PVStructure;
 import org.epics.pvdata.pv.ScalarType;
@@ -135,9 +136,9 @@ public class V4ArchApplProxy
 	            Structure valueStructure = fieldCreate.createStructure(
 	            		columnNames,
 	            		 new Field[] {
+	                            fieldCreate.createScalarArray(ScalarType.pvLong),
 	                            fieldCreate.createScalarArray(ScalarType.pvDouble),
-	                            fieldCreate.createScalarArray(ScalarType.pvDouble),
-	                            fieldCreate.createScalarArray(ScalarType.pvDouble),
+	                            fieldCreate.createScalarArray(ScalarType.pvInt),
 	                            fieldCreate.createScalarArray(ScalarType.pvInt),
 	                            fieldCreate.createScalarArray(ScalarType.pvInt),
 	                            }
@@ -157,9 +158,9 @@ public class V4ArchApplProxy
 	            labelsArray.put(0, columnNames.length, columnNames, 0);
 
 	            PVStructure valuesStructure = result.getStructureField("value");
-	            PVDoubleArray epochSecondsArray = (PVDoubleArray) valuesStructure.getScalarArrayField("epochSeconds",ScalarType.pvDouble);
+	            PVLongArray epochSecondsArray = (PVLongArray) valuesStructure.getScalarArrayField("epochSeconds",ScalarType.pvLong);
 	            PVDoubleArray valuesArray = (PVDoubleArray) valuesStructure.getScalarArrayField("values",ScalarType.pvDouble);
-	            PVDoubleArray nanosArray = (PVDoubleArray) valuesStructure.getScalarArrayField("nanos",ScalarType.pvDouble);
+	            PVIntArray nanosArray = (PVIntArray) valuesStructure.getScalarArrayField("nanos",ScalarType.pvInt);
 	            PVIntArray severityArray = (PVIntArray) valuesStructure.getScalarArrayField("severity",ScalarType.pvInt);
 	            PVIntArray statusArray = (PVIntArray) valuesStructure.getScalarArrayField("status",ScalarType.pvInt);
 
@@ -174,22 +175,22 @@ public class V4ArchApplProxy
 				}
 
 				try {
-					List<Double> timeStamps = new LinkedList<Double>();
+					List<Long> timeStamps = new LinkedList<Long>();
 					List<Double> values = new LinkedList<Double>();
-					List<Double> nanos = new LinkedList<Double>();
+					List<Integer> nanos = new LinkedList<Integer>();
 					List<Integer> severities = new LinkedList<Integer>();
 					List<Integer> statuses = new LinkedList<Integer>();
 					for(EpicsMessage dbrevent : strm) {
-						timeStamps.add(new Double(dbrevent.getTimestamp().getTime()));
+						timeStamps.add(new Long(dbrevent.getTimestamp().getTime()));
 						values.add(dbrevent.getNumberValue().doubleValue());
-						nanos.add(new Double(dbrevent.getTimestamp().getNanos()));
+						nanos.add(dbrevent.getTimestamp().getNanos());
 						severities.add(dbrevent.getSeverity());
 						statuses.add(dbrevent.getStatus());
 					}
 					int totalValues = timeStamps.size();
-					epochSecondsArray.put(0, totalValues, timeStamps.stream().mapToDouble(Double::doubleValue).toArray(), 0);
+					epochSecondsArray.put(0, totalValues, timeStamps.stream().mapToLong(Long::longValue).toArray(), 0);
 					valuesArray.put(0, totalValues, values.stream().mapToDouble(Double::doubleValue).toArray(), 0);
-					nanosArray.put(0, totalValues, nanos.stream().mapToDouble(Double::doubleValue).toArray(), 0);
+					nanosArray.put(0, totalValues, nanos.stream().mapToInt(Integer::intValue).toArray(), 0);
 					severityArray.put(0, totalValues, severities.stream().mapToInt(Integer::intValue).toArray(), 0);
 					statusArray.put(0, totalValues, statuses.stream().mapToInt(Integer::intValue).toArray(), 0);
 					long after = System.currentTimeMillis();
