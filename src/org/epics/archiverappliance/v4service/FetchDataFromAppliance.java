@@ -85,7 +85,7 @@ public class FetchDataFromAppliance implements InfoChangeHandler  {
 			ValueHandler valueHandler = determineValueHandler(strm.getPayLoadInfo());
 
 			// Create the result structure of the data interface.
-            String[] columnNames = new String[]{"epochSeconds", "values", "nanos", "severity", "status"};
+            String[] columnNames = new String[]{"secondsPastEpoch", "values", "nanoseconds", "severity", "status"};
 
             Structure valueStructure = fieldCreate.createStructure(
             		columnNames,
@@ -112,8 +112,8 @@ public class FetchDataFromAppliance implements InfoChangeHandler  {
             labelsArray.put(0, columnNames.length, columnNames, 0);
 
             PVStructure valuesStructure = result.getStructureField("value");
-            PVLongArray epochSecondsArray = (PVLongArray) valuesStructure.getScalarArrayField("epochSeconds",ScalarType.pvLong);
-            PVIntArray nanosArray = (PVIntArray) valuesStructure.getScalarArrayField("nanos",ScalarType.pvInt);
+            PVLongArray epochSecondsArray = (PVLongArray) valuesStructure.getScalarArrayField("secondsPastEpoch",ScalarType.pvLong);
+            PVIntArray nanosArray = (PVIntArray) valuesStructure.getScalarArrayField("nanoseconds",ScalarType.pvInt);
             PVIntArray severityArray = (PVIntArray) valuesStructure.getScalarArrayField("severity",ScalarType.pvInt);
             PVIntArray statusArray = (PVIntArray) valuesStructure.getScalarArrayField("status",ScalarType.pvInt);
 
