@@ -7,6 +7,7 @@ import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.time.temporal.ChronoField;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
@@ -41,6 +42,7 @@ import com.google.common.primitives.Ints;
 import com.google.common.primitives.Shorts;
 
 import edu.stanford.slac.archiverappliance.PB.EPICSEvent.PayloadInfo;
+import edu.stanford.slac.archiverappliance.PB.EPICSEvent.PayloadType;
 
 /**
  * Make a call to the specified appliance; get the data using the raw protocol and then convert it to a NTTable.
@@ -84,32 +86,7 @@ public class FetchDataFromAppliance implements InfoChangeHandler  {
 			// Determine the type of the .VAL
 			ValueHandler valueHandler = determineValueHandler(strm.getPayLoadInfo());
 
-			// Create the result structure of the data interface.
-            String[] columnNames = new String[]{"secondsPastEpoch", "values", "nanoseconds", "severity", "status"};
-
-            Structure valueStructure = fieldCreate.createStructure(
-            		columnNames,
-            		 new Field[] {
-                            fieldCreate.createScalarArray(ScalarType.pvLong),
-                            fieldCreate.createScalarArray(valueHandler.getValueType()),
-                            fieldCreate.createScalarArray(ScalarType.pvInt),
-                            fieldCreate.createScalarArray(ScalarType.pvInt),
-                            fieldCreate.createScalarArray(ScalarType.pvInt),
-                            }
-            		);
-            Structure resultStructure =
-                    fieldCreate.createStructure( "epics:nt/NTTable:1.0",
-                            new String[] { "labels", "value" },
-                            new Field[] { 
-                    			fieldCreate.createScalarArray(ScalarType.pvString),
-                    			valueStructure 
-                    			} 
-                    		);
-            
-            PVStructure result = PVDataFactory.getPVDataCreate().createPVStructure(resultStructure);
-
-            PVStringArray labelsArray = (PVStringArray) result.getScalarArrayField("labels",ScalarType.pvString);
-            labelsArray.put(0, columnNames.length, columnNames, 0);
+			PVStructure result = createResultStructure(strm.getPayLoadInfo(), valueHandler);
 
             PVStructure valuesStructure = result.getStructureField("value");
             PVLongArray epochSecondsArray = (PVLongArray) valuesStructure.getScalarArrayField("secondsPastEpoch",ScalarType.pvLong);
@@ -178,6 +155,53 @@ public class FetchDataFromAppliance implements InfoChangeHandler  {
 		}
 	}
 	
+	/**
+	 * For scalars, return the data in an NTTable. For other types, Greg suggests we should use NTMultiChannel
+	 * @param payloadInfo
+	 * @param valueHandler
+	 * @return
+	 */
+	private PVStructure createResultStructure(PayloadInfo payloadInfo, ValueHandler valueHandler) {
+		List<PayloadType> scalarTypes = Arrays.asList(PayloadType.SCALAR_BYTE, 
+				PayloadType.SCALAR_DOUBLE, 
+				PayloadType.SCALAR_ENUM,
+				PayloadType.SCALAR_FLOAT,
+				PayloadType.SCALAR_INT,
+				PayloadType.SCALAR_SHORT,
+				PayloadType.SCALAR_STRING);
+		if(scalarTypes.contains(payloadInfo.getType())) { 
+			// Create the result structure of the data interface.
+			String[] columnNames = new String[]{"secondsPastEpoch", "values", "nanoseconds", "severity", "status"};
+	
+			Structure valueStructure = fieldCreate.createStructure(
+					columnNames,
+					 new Field[] {
+			                fieldCreate.createScalarArray(ScalarType.pvLong),
+			                fieldCreate.createScalarArray(valueHandler.getValueType()),
+			                fieldCreate.createScalarArray(ScalarType.pvInt),
+			                fieldCreate.createScalarArray(ScalarType.pvInt),
+			                fieldCreate.createScalarArray(ScalarType.pvInt),
+			                }
+					);
+			Structure resultStructure =
+			        fieldCreate.createStructure( "epics:nt/NTTable:1.0",
+			                new String[] { "labels", "value" },
+			                new Field[] { 
+			        			fieldCreate.createScalarArray(ScalarType.pvString),
+			        			valueStructure 
+			        			} 
+			        		);
+			
+			PVStructure result = PVDataFactory.getPVDataCreate().createPVStructure(resultStructure);
+	
+			PVStringArray labelsArray = (PVStringArray) result.getScalarArrayField("labels",ScalarType.pvString);
+			labelsArray.put(0, columnNames.length, columnNames, 0);
+			return result;
+		} else { 
+			return null;
+		}
+	}
+
 	/**
 	 * Interface to help with the various DBR Types.
 	 */
