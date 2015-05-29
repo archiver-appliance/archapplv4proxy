@@ -13,5 +13,6 @@
 	<classpathentry kind="lib" path="lib/pvAccessJava-4.0.0.jar"/>
 	<classpathentry kind="lib" path="lib/pvDataJava-4.0.0.jar"/>
 	<classpathentry kind="lib" path="lib/jca-2.3.6.jar"/>
+	<classpathentry kind="lib" path="lib/guava-18.0.jar"/>
 	<classpathentry kind="output" path="build/classes"/>
 </classpath>
