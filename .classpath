@@ -8,11 +8,11 @@
 	</classpathentry>
 	<classpathentry kind="lib" path="lib/log4j-api-2.2.jar"/>
 	<classpathentry kind="lib" path="lib/log4j-core-2.2.jar"/>
-	<classpathentry kind="lib" path="lib/pbrawclient-0.0.3.jar"/>
 	<classpathentry kind="lib" path="lib/protobuf-java-2.4.1.jar"/>
 	<classpathentry kind="lib" path="lib/pvAccessJava-4.0.0.jar"/>
 	<classpathentry kind="lib" path="lib/pvDataJava-4.0.0.jar"/>
 	<classpathentry kind="lib" path="lib/jca-2.3.6.jar"/>
 	<classpathentry kind="lib" path="lib/guava-18.0.jar"/>
+	<classpathentry kind="lib" path="lib/pbrawclient-0.0.4.jar"/>
 	<classpathentry kind="output" path="build/classes"/>
 </classpath>

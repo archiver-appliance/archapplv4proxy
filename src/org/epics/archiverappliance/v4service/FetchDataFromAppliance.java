@@ -123,7 +123,7 @@ public class FetchDataFromAppliance implements InfoChangeHandler  {
 				List<Integer> severities = new LinkedList<Integer>();
 				List<Integer> statuses = new LinkedList<Integer>();
 				for(EpicsMessage dbrevent : strm) {
-					timeStamps.add(new Long(dbrevent.getTimestamp().getTime()));
+					timeStamps.add(new Long(dbrevent.getTimestamp().getTime()/1000));
 					// The valueHandler knows what to do with the various DBR types.
 					valueHandler.handleMessage(dbrevent);
 					nanos.add(dbrevent.getTimestamp().getNanos());
@@ -322,7 +322,7 @@ public class FetchDataFromAppliance implements InfoChangeHandler  {
 			return new ScalarValueHandler<String,PVStringArray>(ScalarType.pvString) {
 				@Override
 				public void handleMessage(EpicsMessage dbrevent) throws IOException {
-					values.add(dbrevent.toString());
+					values.add(dbrevent.getStringValue());
 				}
 				@Override
 				public void putIntoValuesArray(PVStringArray valuesArray, int totalValues) {
