@@ -7,6 +7,7 @@ package org.epics.archiverappliance.v4service;
 import edu.stanford.slac.archiverappliance.PB.EPICSEvent.PayloadInfo;
 import gov.aps.jca.CAException;
 
+import java.io.IOException;
 import java.sql.Timestamp;
 import java.text.ParseException;
 import java.time.ZonedDateTime;
@@ -112,12 +113,35 @@ public class V4ArchApplProxy
 		server.printInfo();
 		server.run(0);
 	}
+	
+	/**
+	 * Handle the various kinds of values
+	 */
+	private interface ValueHandler {
+		/**
+		 * Add the value from the event into whatever state is being used
+		 * @param dbrevent
+		 */
+		public void handleMessage(EpicsMessage dbrevent) throws IOException;
+		/**
+		 * What should we use when creating the field in PVStructure
+		 * @return
+		 */
+		public ScalarType getValueType();
+		/**
+		 * We are done; now stuff all the values into the result;
+		 * @param structure -  remember to pass the structure for the values
+		 * @param totalValues - The number of elements to stuff into the structure
+		 */
+		public void stuffInResult(PVStructure valuesStructure, int totalValues);
+	}
 
 	private static class FetchDataFromAppliance implements InfoChangeHandler  {
 		String pvName;
 		Timestamp start;
 		Timestamp end;
 		String serverURL;
+		
 		
 		public FetchDataFromAppliance(String serverDataRetrievalURL, String pvName, String startStr, String endStr) throws ParseException {
 			this.serverURL = serverDataRetrievalURL;
@@ -129,7 +153,22 @@ public class V4ArchApplProxy
 
 		public PVStructure getData() throws Exception {
 			try {
-				logger.debug("Making a call");
+				long before = System.currentTimeMillis();
+
+				// Call the server and get the data
+				RawDataRetrieval rawDataRetrieval = new RawDataRetrieval(serverURL);
+				HashMap<String, String> extraParams = new HashMap<String,String>();
+				GenMsgIterator strm = rawDataRetrieval.getDataForPV(pvName, start, end, false, extraParams);
+				if(strm == null) { 
+					return null;
+				}
+				
+				// Register for info changes; we may have to do something later..
+				strm.onInfoChange(this);
+				
+				// Determine the type of the .VAL
+				ValueHandler valueHandler = deterValueHandler(strm.getPayLoadInfo());
+
 				// Create the result structure of the data interface.
 	            String[] columnNames = new String[]{"epochSeconds", "values", "nanos", "severity", "status"};
 
@@ -137,7 +176,7 @@ public class V4ArchApplProxy
 	            		columnNames,
 	            		 new Field[] {
 	                            fieldCreate.createScalarArray(ScalarType.pvLong),
-	                            fieldCreate.createScalarArray(ScalarType.pvDouble),
+	                            fieldCreate.createScalarArray(valueHandler.getValueType()),
 	                            fieldCreate.createScalarArray(ScalarType.pvInt),
 	                            fieldCreate.createScalarArray(ScalarType.pvInt),
 	                            fieldCreate.createScalarArray(ScalarType.pvInt),
@@ -159,44 +198,32 @@ public class V4ArchApplProxy
 
 	            PVStructure valuesStructure = result.getStructureField("value");
 	            PVLongArray epochSecondsArray = (PVLongArray) valuesStructure.getScalarArrayField("epochSeconds",ScalarType.pvLong);
-	            PVDoubleArray valuesArray = (PVDoubleArray) valuesStructure.getScalarArrayField("values",ScalarType.pvDouble);
 	            PVIntArray nanosArray = (PVIntArray) valuesStructure.getScalarArrayField("nanos",ScalarType.pvInt);
 	            PVIntArray severityArray = (PVIntArray) valuesStructure.getScalarArrayField("severity",ScalarType.pvInt);
 	            PVIntArray statusArray = (PVIntArray) valuesStructure.getScalarArrayField("status",ScalarType.pvInt);
 
-	            // Call the server and get the data
-				long before = System.currentTimeMillis();
-				RawDataRetrieval rawDataRetrieval = new RawDataRetrieval(serverURL);
-				HashMap<String, String> extraParams = new HashMap<String,String>();
-				GenMsgIterator strm = rawDataRetrieval.getDataForPV(pvName, start, end, false, extraParams);
-
-				if(strm != null) { 
-					strm.onInfoChange(this);
-				}
-
 				try {
 					List<Long> timeStamps = new LinkedList<Long>();
-					List<Double> values = new LinkedList<Double>();
 					List<Integer> nanos = new LinkedList<Integer>();
 					List<Integer> severities = new LinkedList<Integer>();
 					List<Integer> statuses = new LinkedList<Integer>();
 					for(EpicsMessage dbrevent : strm) {
 						timeStamps.add(new Long(dbrevent.getTimestamp().getTime()));
-						values.add(dbrevent.getNumberValue().doubleValue());
+						valueHandler.handleMessage(dbrevent);
 						nanos.add(dbrevent.getTimestamp().getNanos());
 						severities.add(dbrevent.getSeverity());
 						statuses.add(dbrevent.getStatus());
 					}
 					int totalValues = timeStamps.size();
 					epochSecondsArray.put(0, totalValues, timeStamps.stream().mapToLong(Long::longValue).toArray(), 0);
-					valuesArray.put(0, totalValues, values.stream().mapToDouble(Double::doubleValue).toArray(), 0);
+					valueHandler.stuffInResult(valuesStructure, totalValues);
 					nanosArray.put(0, totalValues, nanos.stream().mapToInt(Integer::intValue).toArray(), 0);
 					severityArray.put(0, totalValues, severities.stream().mapToInt(Integer::intValue).toArray(), 0);
 					statusArray.put(0, totalValues, statuses.stream().mapToInt(Integer::intValue).toArray(), 0);
 					long after = System.currentTimeMillis();
 					logger.info("Retrieved " + totalValues	+ " values  for pv " + pvName + " in " + (after-before) + "(ms)");
 				} finally {
-					if(strm != null) { strm.close(); }
+					strm.close();
 				}
 				
 				return result;
@@ -228,6 +255,61 @@ public class V4ArchApplProxy
 				throw ex;
 			}
 		}
+		
+		private ValueHandler deterValueHandler(PayloadInfo payloadInfo) { 
+			switch(payloadInfo.getType()) {
+			case SCALAR_BYTE:
+				break;
+			case SCALAR_DOUBLE:
+				return new ValueHandler() {
+					private LinkedList<Double> values = new LinkedList<Double>();
+					@Override
+					public ScalarType getValueType() {
+						return ScalarType.pvDouble;
+					}
+					@Override
+					public void handleMessage(EpicsMessage dbrevent) throws IOException {
+						values.add(dbrevent.getNumberValue().doubleValue());
+					}
+					@Override
+					public void stuffInResult(PVStructure valuesStructure, int totalValues) {
+			            PVDoubleArray valuesArray = (PVDoubleArray) valuesStructure.getScalarArrayField("values",getValueType());
+			            valuesArray.put(0, totalValues, values.stream().mapToDouble(Double::doubleValue).toArray(), 0);
+					}
+				};
+			case SCALAR_ENUM:
+				break;
+			case SCALAR_FLOAT:
+				break;
+			case SCALAR_INT:
+				break;
+			case SCALAR_SHORT:
+				break;
+			case SCALAR_STRING:
+				break;
+			case V4_GENERIC_BYTES:
+				break;
+			case WAVEFORM_BYTE:
+				break;
+			case WAVEFORM_DOUBLE:
+				break;
+			case WAVEFORM_ENUM:
+				break;
+			case WAVEFORM_FLOAT:
+				break;
+			case WAVEFORM_INT:
+				break;
+			case WAVEFORM_SHORT:
+				break;
+			case WAVEFORM_STRING:
+				break;
+			default:
+				break; 
+			}
+			
+			return null;
+		}
+		
 	}
 
 	
