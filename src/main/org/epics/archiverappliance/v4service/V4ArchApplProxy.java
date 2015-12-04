@@ -4,10 +4,9 @@
  */
 package org.epics.archiverappliance.v4service;
 
-import gov.aps.jca.CAException;
-
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.epics.archiverappliance.v4service.FetchDataFromAppliance;
 import org.epics.pvaccess.PVAException;
 import org.epics.pvaccess.server.rpc.RPCRequestException;
 import org.epics.pvaccess.server.rpc.RPCServer;
@@ -55,6 +54,7 @@ public class V4ArchApplProxy
             	PVStructure result = fetchData.getData();
             	return result;
             } catch(Exception ex) { 
+            	logger.error("Exception fetching data from the appliance", ex);
             	throw new RPCRequestException(StatusType.ERROR, "Exception fetching data", ex);
             }
 		}
