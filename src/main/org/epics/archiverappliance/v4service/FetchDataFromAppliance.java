@@ -25,10 +25,13 @@ import org.epics.pvdata.factory.PVDataFactory;
 import org.epics.pvdata.pv.Field;
 import org.epics.pvdata.pv.FieldCreate;
 import org.epics.pvdata.pv.PVByteArray;
+import org.epics.pvdata.pv.PVDouble;
 import org.epics.pvdata.pv.PVDoubleArray;
 import org.epics.pvdata.pv.PVFloatArray;
 import org.epics.pvdata.pv.PVIntArray;
 import org.epics.pvdata.pv.PVLongArray;
+import org.epics.pvdata.pv.PVScalar;
+import org.epics.pvdata.pv.PVScalarArray;
 import org.epics.pvdata.pv.PVShortArray;
 import org.epics.pvdata.pv.PVStringArray;
 import org.epics.pvdata.pv.PVStructure;
@@ -88,14 +91,6 @@ public class FetchDataFromAppliance implements InfoChangeHandler  {
 			// Determine the type of the .VAL
 			ValueHandler valueHandler = determineValueHandler(strm.getPayLoadInfo());
 
-			PVStructure result = createResultStructure(strm.getPayLoadInfo(), valueHandler);
-
-            PVStructure valuesStructure = result.getStructureField("value");
-            PVLongArray epochSecondsArray = (PVLongArray) valuesStructure.getScalarArrayField("secondsPastEpoch",ScalarType.pvLong);
-            PVIntArray nanosArray = (PVIntArray) valuesStructure.getScalarArrayField("nanoseconds",ScalarType.pvInt);
-            PVIntArray severityArray = (PVIntArray) valuesStructure.getScalarArrayField("severity",ScalarType.pvInt);
-            PVIntArray statusArray = (PVIntArray) valuesStructure.getScalarArrayField("status",ScalarType.pvInt);
-
 			try {
 				List<Long> timeStamps = new LinkedList<Long>();
 				List<Integer> nanos = new LinkedList<Integer>();
@@ -109,19 +104,38 @@ public class FetchDataFromAppliance implements InfoChangeHandler  {
 					severities.add(dbrevent.getSeverity());
 					statuses.add(dbrevent.getStatus());
 				}
+
 				int totalValues = timeStamps.size();
+				PVStructure result = createResultStructure(strm.getPayLoadInfo(), valueHandler);
+				logger.debug(result.getStructure().toString());
+				
+				valueHandler.addToResult(result, totalValues);
+				
+				PVStructure structureContainingTimeFields = result;
+				if(valueHandler.timeFieldsInValueStructure()) { 
+					logger.debug("The secondsPastEpoch and other fields are in the value structure for NTTable");
+					structureContainingTimeFields = result.getStructureField("value");
+				}
+
+				PVLongArray epochSecondsArray = (PVLongArray) structureContainingTimeFields.getScalarArrayField("secondsPastEpoch",ScalarType.pvLong);
 				epochSecondsArray.put(0, totalValues, timeStamps.stream().mapToLong(Long::longValue).toArray(), 0);
-				valueHandler.addToResult(valuesStructure, totalValues);
+
+				PVIntArray nanosArray = (PVIntArray) structureContainingTimeFields.getScalarArrayField("nanoseconds",ScalarType.pvInt);
 				nanosArray.put(0, totalValues, nanos.stream().mapToInt(Integer::intValue).toArray(), 0);
+
+				PVIntArray severityArray = (PVIntArray) structureContainingTimeFields.getScalarArrayField("severity",ScalarType.pvInt);
 				severityArray.put(0, totalValues, severities.stream().mapToInt(Integer::intValue).toArray(), 0);
+
+				PVIntArray statusArray = (PVIntArray) structureContainingTimeFields.getScalarArrayField("status",ScalarType.pvInt);
 				statusArray.put(0, totalValues, statuses.stream().mapToInt(Integer::intValue).toArray(), 0);
+				
 				long after = System.currentTimeMillis();
 				logger.info("Retrieved " + totalValues	+ " values  for pv " + pvName + " in " + (after-before) + "(ms)");
+				return result;
 			} finally {
 				strm.close();
 			}
 			
-			return result;
 		} catch(Throwable t) {
 			logger.error("Exception fetching data for pv {}", pvName, t);
 			throw new RPCRequestException(StatusType.ERROR, "Exception getting data from the server", t);
@@ -164,21 +178,6 @@ public class FetchDataFromAppliance implements InfoChangeHandler  {
 	 * @return
 	 */
 	private PVStructure createResultStructure(PayloadInfo payloadInfo, ValueHandler valueHandler) {
-		List<PayloadType> scalarTypes = Arrays.asList(PayloadType.SCALAR_BYTE, 
-				PayloadType.SCALAR_DOUBLE, 
-				PayloadType.SCALAR_ENUM,
-				PayloadType.SCALAR_FLOAT,
-				PayloadType.SCALAR_INT,
-				PayloadType.SCALAR_SHORT,
-				PayloadType.SCALAR_STRING);
-		
-		List<PayloadType> waveformTypes = Arrays.asList(PayloadType.WAVEFORM_BYTE, 
-				PayloadType.WAVEFORM_DOUBLE, 
-				PayloadType.WAVEFORM_ENUM,
-				PayloadType.WAVEFORM_FLOAT,
-				PayloadType.WAVEFORM_INT,
-				PayloadType.WAVEFORM_SHORT,
-				PayloadType.WAVEFORM_STRING);
 
 		if(scalarTypes.contains(payloadInfo.getType())) { 
 			// Create the result structure of the data interface.
@@ -209,34 +208,22 @@ public class FetchDataFromAppliance implements InfoChangeHandler  {
 			labelsArray.put(0, columnNames.length, columnNames, 0);
 			return result;
 		} else if(waveformTypes.contains(payloadInfo.getType())) { 
-			// Create the result structure of the data interface.
-			String[] columnNames = new String[]{"secondsPastEpoch", "values", "nanoseconds", "severity", "status"};
-			
 			Structure sampleValuesStructure = fieldCreate.createStructure(new String[] { "sampleValues" }, new Field[] { fieldCreate.createScalarArray(valueHandler.getValueType()) });
 	
-			Structure valueStructure = fieldCreate.createStructure(
-					columnNames,
-					 new Field[] {
-			                fieldCreate.createScalarArray(ScalarType.pvLong),
-			                fieldCreate.createStructureArray(sampleValuesStructure),
-			                fieldCreate.createScalarArray(ScalarType.pvInt),
-			                fieldCreate.createScalarArray(ScalarType.pvInt),
-			                fieldCreate.createScalarArray(ScalarType.pvInt),
-			                }
-					);
 			Structure resultStructure =
-			        fieldCreate.createStructure( "archiver:waveform:1.0",
-			                new String[] { "labels", "value" },
+			        fieldCreate.createStructure( "epics:nt/NTMultiChannel:1.0",
+			                new String[] { "value", "channelName", "severity", "status", "secondsPastEpoch", "nanoseconds" },
 			                new Field[] { 
-			        			fieldCreate.createScalarArray(ScalarType.pvString),
-			        			valueStructure 
+			                		fieldCreate.createStructureArray(sampleValuesStructure),
+			                		fieldCreate.createScalarArray(ScalarType.pvString),
+					                fieldCreate.createScalarArray(ScalarType.pvInt),
+					                fieldCreate.createScalarArray(ScalarType.pvInt),
+					                fieldCreate.createScalarArray(ScalarType.pvLong),
+					                fieldCreate.createScalarArray(ScalarType.pvInt)
 			        			} 
 			        		);
 			
 			PVStructure result = PVDataFactory.getPVDataCreate().createPVStructure(resultStructure);
-	
-			PVStringArray labelsArray = (PVStringArray) result.getScalarArrayField("labels",ScalarType.pvString);
-			labelsArray.put(0, columnNames.length, columnNames, 0);
 			return result;
 		}
 		else { 
@@ -260,10 +247,17 @@ public class FetchDataFromAppliance implements InfoChangeHandler  {
 		public ScalarType getValueType();
 		/**
 		 * We are done; now stuff all the values into the result;
-		 * @param structure -  remember to pass the structure for the values; not the result structure
+		 * @param structure -  The result structure....
 		 * @param totalValues - The number of elements to stuff into the structure
 		 */
-		public void addToResult(PVStructure valuesStructure, int totalValues);
+		public void addToResult(PVStructure result, int totalValues);
+		
+		/**
+		 * There is a small difference between the NTTable and the NTMultiChannel in where the secondsPastEpoch, severity and status fields are
+		 * Return true if these fields are in the structure corresponding to the "value" field.
+		 * @return
+		 */
+		public boolean timeFieldsInValueStructure();
 	}
 
 	
@@ -292,7 +286,8 @@ public class FetchDataFromAppliance implements InfoChangeHandler  {
 		public abstract void handleMessage(EpicsMessage dbrevent) throws IOException;
 
 		@Override
-		public void addToResult(PVStructure valuesStructure, int totalValues) { 
+		public void addToResult(PVStructure result, int totalValues) { 
+			PVStructure valuesStructure = result.getStructureField("value");
 			@SuppressWarnings("unchecked")
 			PVDataType valuesArray = (PVDataType) valuesStructure.getScalarArrayField("values",getValueType());
             this.putIntoValuesArray(valuesArray, totalValues);
@@ -304,16 +299,21 @@ public class FetchDataFromAppliance implements InfoChangeHandler  {
 		 * @param totalValues
 		 */
 		protected abstract void putIntoValuesArray(PVDataType valuesArray, int totalValues);
+		
+		@Override
+		public boolean timeFieldsInValueStructure() { 
+			return true;
+		}
 	}
 
 	/**
 	 * @author mshankar
-	 * Helper generic to handle the bulk of the DBR type boilerplate
+	 * Helper generic to handle the bulk of the DBR type boilerplate for waveforms of numbers
 	 *
 	 * @param <JavaType> - This is the Java object type for the primitive - for example, Double for double
 	 * @param <PVDataType> - This is the PVData object type for the array result - for example PVDoubleArray for DBR_DOUBLE.
 	 */
-	private abstract class WaveformValueHandler<JavaType, PVDataType> implements ValueHandler {
+	private abstract class WaveformValueHandler<JavaType, PVDataType extends PVScalar, PVWaveformDataType extends PVScalarArray> implements ValueHandler {
 		ScalarType valueType;
 		LinkedList<List<JavaType>> values = new LinkedList<List<JavaType>>();
 
@@ -328,12 +328,30 @@ public class FetchDataFromAppliance implements InfoChangeHandler  {
 
 		@Override
 		// handleMessage is handled in the final implementation; the thrown IOException makes it difficult to use a lambda
-		public abstract void handleMessage(EpicsMessage dbrevent) throws IOException;
+		public void handleMessage(EpicsMessage dbrevent) throws IOException { 
+			int totalEvents = dbrevent.getElementCount();
+			logger.debug("Adding {} events ", totalEvents);
+			ArrayList<JavaType> sampleValues = new ArrayList<JavaType>();
+			for(int i = 0; i < totalEvents; i++) {
+				sampleValues.add(getSampleValueAt(dbrevent, i));
+			}
+			values.add(sampleValues);
+		}
+		
+		/**
+		 * Given a waveform event from the archiver, get the sample at the specified index.
+		 * @param dbrevent
+		 * @param index
+		 * @return
+		 * @throws IOException
+		 */
+		public abstract JavaType getSampleValueAt(EpicsMessage dbrevent, int index) throws IOException;
+		
 
 		@Override
-		public void addToResult(PVStructure valuesStructure, int totalValues) { 
-			@SuppressWarnings("unchecked")
-			PVDataType valuesArray = (PVDataType) valuesStructure.getStructureArrayField("values");
+		public void addToResult(PVStructure result, int totalValues) {
+			PVStructureArray valuesArray = (PVStructureArray) result.getStructureArrayField("value");
+			assert(valuesArray != null);
             this.putIntoValuesArray(valuesArray, totalValues);
 		}
 		
@@ -342,7 +360,24 @@ public class FetchDataFromAppliance implements InfoChangeHandler  {
 		 * @param valuesArray
 		 * @param totalValues
 		 */
-		protected abstract void putIntoValuesArray(PVDataType valuesArray, int totalValues);
+		public void putIntoValuesArray(PVStructureArray valuesArray, int totalValues) {
+			ArrayList<PVStructure> resultStructures = new ArrayList<PVStructure>(totalValues);
+			for(List<JavaType> srcValues : this.values) { 
+				PVStructure sampleValuesStructure = PVDataFactory.getPVDataCreate().createPVStructure(valuesArray.getStructureArray().getStructure());
+				@SuppressWarnings("unchecked")
+				PVWaveformDataType sampleValues = (PVWaveformDataType) sampleValuesStructure.getScalarArrayField("sampleValues", getValueType());
+				this.putSamplesIntoStructure(sampleValues, srcValues);
+				resultStructures.add(sampleValuesStructure);
+			}
+			valuesArray.put(0,  resultStructures.size(), resultStructures.toArray(new PVStructure[0]), 0);
+		}
+		
+		protected abstract void putSamplesIntoStructure(PVWaveformDataType sampleValues, List<JavaType> srcValues);
+		
+		@Override
+		public boolean timeFieldsInValueStructure() { 
+			return false;
+		}
 	}
 
 	/**
@@ -438,27 +473,15 @@ public class FetchDataFromAppliance implements InfoChangeHandler  {
 		case WAVEFORM_BYTE:
 			break;
 		case WAVEFORM_DOUBLE:
-			return new WaveformValueHandler<Double,PVStructureArray>(ScalarType.pvDouble) {
+			return new WaveformValueHandler<Double,PVDouble, PVDoubleArray>(ScalarType.pvDouble) {
 				@Override
-				public void handleMessage(EpicsMessage dbrevent) throws IOException {
-					int totalEvents = dbrevent.getElementCount();
-					logger.info("Adding {} events ", totalEvents);
-					ArrayList<Double> sampleValues = new ArrayList<Double>();
-					for(int i = 0; i < totalEvents; i++) {
-						sampleValues.add((dbrevent.getNumberAt(i).doubleValue()));
-					}
-					values.add(sampleValues);
+				public Double getSampleValueAt(EpicsMessage dbrevent, int index) throws IOException {
+					return dbrevent.getNumberAt(index).doubleValue();
 				}
+
 				@Override
-				public void putIntoValuesArray(PVStructureArray valuesArray, int totalValues) {
-					ArrayList<PVStructure> resultStructures = new ArrayList<PVStructure>(totalValues);
-					for(List<Double> srcValues : this.values) { 
-						PVStructure sampleValuesStructure = PVDataFactory.getPVDataCreate().createPVStructure(valuesArray.getStructureArray().getStructure());
-						PVDoubleArray sampleValues = (PVDoubleArray) sampleValuesStructure.getScalarArrayField("sampleValues", getValueType());
-						sampleValues.put(0, srcValues.size(), srcValues.stream().mapToDouble(Double::doubleValue).toArray(), 0);
-						resultStructures.add(sampleValuesStructure);
-					}
-					valuesArray.put(0,  resultStructures.size(), resultStructures.toArray(new PVStructure[0]), 0);
+				protected void putSamplesIntoStructure(PVDoubleArray sampleValues, List<Double> srcValues) {
+					sampleValues.put(0, srcValues.size(), srcValues.stream().mapToDouble(Double::doubleValue).toArray(), 0);				
 				}
 			};
 		case WAVEFORM_ENUM:
@@ -476,7 +499,25 @@ public class FetchDataFromAppliance implements InfoChangeHandler  {
 		}
 		
 		return null;
-	}	
+	}
+	
+	
+	private static List<PayloadType> scalarTypes = Arrays.asList(PayloadType.SCALAR_BYTE, 
+			PayloadType.SCALAR_DOUBLE, 
+			PayloadType.SCALAR_ENUM,
+			PayloadType.SCALAR_FLOAT,
+			PayloadType.SCALAR_INT,
+			PayloadType.SCALAR_SHORT,
+			PayloadType.SCALAR_STRING);
+	
+	private static List<PayloadType> waveformTypes = Arrays.asList(PayloadType.WAVEFORM_BYTE, 
+			PayloadType.WAVEFORM_DOUBLE, 
+			PayloadType.WAVEFORM_ENUM,
+			PayloadType.WAVEFORM_FLOAT,
+			PayloadType.WAVEFORM_INT,
+			PayloadType.WAVEFORM_SHORT,
+			PayloadType.WAVEFORM_STRING);
+
 }
 
 
