@@ -35,7 +35,8 @@ import org.epics.pvdata.pv.PVScalarArray;
 import org.epics.pvdata.pv.PVShortArray;
 import org.epics.pvdata.pv.PVStringArray;
 import org.epics.pvdata.pv.PVStructure;
-import org.epics.pvdata.pv.PVStructureArray;
+import org.epics.pvdata.pv.PVUnion;
+import org.epics.pvdata.pv.PVUnionArray;
 import org.epics.pvdata.pv.ScalarType;
 import org.epics.pvdata.pv.Status.StatusType;
 import org.epics.pvdata.pv.Structure;
@@ -208,22 +209,25 @@ public class FetchDataFromAppliance implements InfoChangeHandler  {
 			labelsArray.put(0, columnNames.length, columnNames, 0);
 			return result;
 		} else if(waveformTypes.contains(payloadInfo.getType())) { 
-			Structure sampleValuesStructure = fieldCreate.createStructure(new String[] { "sampleValues" }, new Field[] { fieldCreate.createScalarArray(valueHandler.getValueType()) });
-	
 			Structure resultStructure =
 			        fieldCreate.createStructure( "epics:nt/NTMultiChannel:1.0",
 			                new String[] { "value", "channelName", "severity", "status", "secondsPastEpoch", "nanoseconds" },
 			                new Field[] { 
-			                		fieldCreate.createStructureArray(sampleValuesStructure),
+			                		fieldCreate.createVariantUnionArray(),
 			                		fieldCreate.createScalarArray(ScalarType.pvString),
 					                fieldCreate.createScalarArray(ScalarType.pvInt),
 					                fieldCreate.createScalarArray(ScalarType.pvInt),
 					                fieldCreate.createScalarArray(ScalarType.pvLong),
 					                fieldCreate.createScalarArray(ScalarType.pvInt)
-			        			} 
+			        			}
 			        		);
 			
 			PVStructure result = PVDataFactory.getPVDataCreate().createPVStructure(resultStructure);
+			
+			PVStringArray namesArray = (PVStringArray) result.getScalarArrayField("channelName",ScalarType.pvString);
+			namesArray.put(0, 1, new String[] {pvName}, 0);
+
+			
 			return result;
 		}
 		else { 
@@ -350,7 +354,7 @@ public class FetchDataFromAppliance implements InfoChangeHandler  {
 
 		@Override
 		public void addToResult(PVStructure result, int totalValues) {
-			PVStructureArray valuesArray = (PVStructureArray) result.getStructureArrayField("value");
+			PVUnionArray valuesArray = result.getUnionArrayField("value");
 			assert(valuesArray != null);
             this.putIntoValuesArray(valuesArray, totalValues);
 		}
@@ -360,16 +364,17 @@ public class FetchDataFromAppliance implements InfoChangeHandler  {
 		 * @param valuesArray
 		 * @param totalValues
 		 */
-		public void putIntoValuesArray(PVStructureArray valuesArray, int totalValues) {
-			ArrayList<PVStructure> resultStructures = new ArrayList<PVStructure>(totalValues);
+		public void putIntoValuesArray(PVUnionArray valuesArray, int totalValues) {
+			ArrayList<PVUnion> resultStructures = new ArrayList<PVUnion>(totalValues);
 			for(List<JavaType> srcValues : this.values) { 
-				PVStructure sampleValuesStructure = PVDataFactory.getPVDataCreate().createPVStructure(valuesArray.getStructureArray().getStructure());
+				PVUnion sampleValuesStructure = PVDataFactory.getPVDataCreate().createPVVariantUnion();
 				@SuppressWarnings("unchecked")
-				PVWaveformDataType sampleValues = (PVWaveformDataType) sampleValuesStructure.getScalarArrayField("sampleValues", getValueType());
+				PVWaveformDataType sampleValues = (PVWaveformDataType) PVDataFactory.getPVDataCreate().createPVScalarArray(getValueType());
 				this.putSamplesIntoStructure(sampleValues, srcValues);
+				sampleValuesStructure.set(sampleValues);
 				resultStructures.add(sampleValuesStructure);
 			}
-			valuesArray.put(0,  resultStructures.size(), resultStructures.toArray(new PVStructure[0]), 0);
+			valuesArray.put(0,  resultStructures.size(), resultStructures.toArray(new PVUnion[0]), 0);
 		}
 		
 		protected abstract void putSamplesIntoStructure(PVWaveformDataType sampleValues, List<JavaType> srcValues);
