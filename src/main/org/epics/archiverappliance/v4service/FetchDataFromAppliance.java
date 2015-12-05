@@ -12,6 +12,8 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.function.BiConsumer;
+import java.util.function.BiFunction;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -28,11 +30,14 @@ import org.epics.pvdata.pv.PVByte;
 import org.epics.pvdata.pv.PVByteArray;
 import org.epics.pvdata.pv.PVDouble;
 import org.epics.pvdata.pv.PVDoubleArray;
+import org.epics.pvdata.pv.PVFloat;
 import org.epics.pvdata.pv.PVFloatArray;
+import org.epics.pvdata.pv.PVInt;
 import org.epics.pvdata.pv.PVIntArray;
 import org.epics.pvdata.pv.PVLongArray;
 import org.epics.pvdata.pv.PVScalar;
 import org.epics.pvdata.pv.PVScalarArray;
+import org.epics.pvdata.pv.PVShort;
 import org.epics.pvdata.pv.PVShortArray;
 import org.epics.pvdata.pv.PVStringArray;
 import org.epics.pvdata.pv.PVStructure;
@@ -273,12 +278,16 @@ public class FetchDataFromAppliance implements InfoChangeHandler  {
 	 * @param <JavaType> - This is the Java object type for the primitive - for example, Double for double
 	 * @param <PVDataType> - This is the PVData object type for the array result - for example PVDoubleArray for DBR_DOUBLE.
 	 */
-	private abstract class ScalarValueHandler<JavaType, PVDataType> implements ValueHandler {
+	private class ScalarValueHandler<JavaType, PVDataType> implements ValueHandler {
 		ScalarType valueType;
+		BiConsumer<EpicsMessage, List<JavaType>> handleMessageFunction;
+		BiConsumer<List<JavaType>, PVDataType> putIntoValuesFunction;
 		LinkedList<JavaType> values = new LinkedList<JavaType>();
 
-		public ScalarValueHandler(ScalarType valueType) {
+		public ScalarValueHandler(ScalarType valueType, BiConsumer<EpicsMessage, List<JavaType>> handleMessageFunction, BiConsumer<List<JavaType>, PVDataType> putIntoValuesFunction) {
 			this.valueType = valueType;
+			this.handleMessageFunction = handleMessageFunction;
+			this.putIntoValuesFunction = putIntoValuesFunction;
 		}
 
 		@Override
@@ -287,23 +296,17 @@ public class FetchDataFromAppliance implements InfoChangeHandler  {
 		}
 
 		@Override
-		// handleMessage is handled in the final implementation; the thrown IOException makes it difficult to use a lambda
-		public abstract void handleMessage(EpicsMessage dbrevent) throws IOException;
+		public void handleMessage(EpicsMessage dbrevent) throws IOException {
+			handleMessageFunction.accept(dbrevent,  values);
+		}
 
 		@Override
 		public void addToResult(PVStructure result, int totalValues) { 
 			PVStructure valuesStructure = result.getStructureField("value");
 			@SuppressWarnings("unchecked")
 			PVDataType valuesArray = (PVDataType) valuesStructure.getScalarArrayField("values",getValueType());
-            this.putIntoValuesArray(valuesArray, totalValues);
-		}
-		
-		/**
-		 * The final step into adding into PVDataType; for the primitives, we use Guava's bulk conversion.
-		 * @param valuesArray
-		 * @param totalValues
-		 */
-		protected abstract void putIntoValuesArray(PVDataType valuesArray, int totalValues);
+            putIntoValuesFunction.accept(values, valuesArray);
+		}		
 		
 		@Override
 		public boolean timeFieldsInValueStructure() { 
@@ -318,12 +321,16 @@ public class FetchDataFromAppliance implements InfoChangeHandler  {
 	 * @param <JavaType> - This is the Java object type for the primitive - for example, Double for double
 	 * @param <PVDataType> - This is the PVData object type for the array result - for example PVDoubleArray for DBR_DOUBLE.
 	 */
-	private abstract class WaveformValueHandler<JavaType, PVDataType extends PVScalar, PVWaveformDataType extends PVScalarArray> implements ValueHandler {
+	private class WaveformValueHandler<JavaType, PVDataType extends PVScalar, PVWaveformDataType extends PVScalarArray> implements ValueHandler {
 		ScalarType valueType;
+		BiFunction<EpicsMessage, Integer, JavaType> getSampleValueAtFunction;
+		BiConsumer<PVWaveformDataType, List<JavaType>> putSamplesIntoStructureFunction;
 		LinkedList<List<JavaType>> values = new LinkedList<List<JavaType>>();
 
-		public WaveformValueHandler(ScalarType valueType) {
+		public WaveformValueHandler(ScalarType valueType, BiFunction<EpicsMessage, Integer, JavaType> getSampleValueAtFunction, BiConsumer<PVWaveformDataType, List<JavaType>> putSamplesIntoStructureFunction) {
 			this.valueType = valueType;
+			this.getSampleValueAtFunction = getSampleValueAtFunction;
+			this.putSamplesIntoStructureFunction = putSamplesIntoStructureFunction;
 		}
 
 		@Override
@@ -338,21 +345,11 @@ public class FetchDataFromAppliance implements InfoChangeHandler  {
 			logger.debug("Adding {} events ", totalEvents);
 			ArrayList<JavaType> sampleValues = new ArrayList<JavaType>();
 			for(int i = 0; i < totalEvents; i++) {
-				sampleValues.add(getSampleValueAt(dbrevent, i));
+				sampleValues.add(getSampleValueAtFunction.apply(dbrevent, i));
 			}
 			values.add(sampleValues);
 		}
 		
-		/**
-		 * Given a waveform event from the archiver, get the sample at the specified index.
-		 * @param dbrevent
-		 * @param index
-		 * @return
-		 * @throws IOException
-		 */
-		public abstract JavaType getSampleValueAt(EpicsMessage dbrevent, int index) throws IOException;
-		
-
 		@Override
 		public void addToResult(PVStructure result, int totalValues) {
 			PVUnionArray valuesArray = result.getUnionArrayField("value");
@@ -371,14 +368,12 @@ public class FetchDataFromAppliance implements InfoChangeHandler  {
 				PVUnion sampleValuesStructure = PVDataFactory.getPVDataCreate().createPVVariantUnion();
 				@SuppressWarnings("unchecked")
 				PVWaveformDataType sampleValues = (PVWaveformDataType) PVDataFactory.getPVDataCreate().createPVScalarArray(getValueType());
-				this.putSamplesIntoStructure(sampleValues, srcValues);
+				putSamplesIntoStructureFunction.accept(sampleValues, srcValues);
 				sampleValuesStructure.set(sampleValues);
 				resultStructures.add(sampleValuesStructure);
 			}
 			valuesArray.put(0,  resultStructures.size(), resultStructures.toArray(new PVUnion[0]), 0);
 		}
-		
-		protected abstract void putSamplesIntoStructure(PVWaveformDataType sampleValues, List<JavaType> srcValues);
 		
 		@Override
 		public boolean timeFieldsInValueStructure() { 
@@ -396,120 +391,74 @@ public class FetchDataFromAppliance implements InfoChangeHandler  {
 		// Bulk of this is boilerplate. Use the SCALAR_DOUBLE as an template.
 		switch(payloadInfo.getType()) {
 		case SCALAR_DOUBLE:
-			return new ScalarValueHandler<Double, PVDoubleArray>(ScalarType.pvDouble) {
-				@Override
-				public void handleMessage(EpicsMessage dbrevent) throws IOException {
-					// Add this to the collector in this instance.
-					values.add(dbrevent.getNumberValue().doubleValue());
-				}
-				@Override
-				public void putIntoValuesArray(PVDoubleArray valuesArray, int totalValues) {
-					// Use Guava to convert from the instance collector to a primitive array.
-		            valuesArray.put(0, totalValues, Doubles.toArray(values), 0);
-				}
-			};
+			return new ScalarValueHandler<Double, PVDoubleArray>(
+					ScalarType.pvDouble, 
+					(dbrevent, values) -> values.add(dbrevent.getNumberValue().doubleValue()),
+					(values, valuesArray) -> valuesArray.put(0, values.size(), Doubles.toArray(values), 0));
 		case SCALAR_BYTE:
-			return new ScalarValueHandler<Byte,PVByteArray>(ScalarType.pvByte) {
-				@Override
-				public void handleMessage(EpicsMessage dbrevent) throws IOException {
-					values.add(dbrevent.getNumberValue().byteValue());
-				}
-				@Override
-				public void putIntoValuesArray(PVByteArray valuesArray, int totalValues) {
-		            valuesArray.put(0, totalValues, Bytes.toArray(values), 0);
-				}
-			};
+			return new ScalarValueHandler<Byte,PVByteArray>(
+					ScalarType.pvByte, 
+					(dbrevent, values) -> values.add(dbrevent.getNumberValue().byteValue()),
+					(values, valuesArray) -> valuesArray.put(0, values.size(), Bytes.toArray(values), 0));
 		case SCALAR_ENUM:
-			return new ScalarValueHandler<Integer,PVIntArray>(ScalarType.pvInt) {
-				@Override
-				public void handleMessage(EpicsMessage dbrevent) throws IOException {
-					values.add(dbrevent.getNumberValue().intValue());
-				}
-				@Override
-				public void putIntoValuesArray(PVIntArray valuesArray, int totalValues) {
-		            valuesArray.put(0, totalValues, Ints.toArray(values), 0);
-				}
-			};
+			return new ScalarValueHandler<Integer,PVIntArray>(
+					ScalarType.pvInt, 
+					(dbrevent, values) -> values.add(dbrevent.getNumberValue().intValue()),
+					(values, valuesArray) -> valuesArray.put(0, values.size(), Ints.toArray(values), 0));
 		case SCALAR_FLOAT:
-			return new ScalarValueHandler<Float,PVFloatArray>(ScalarType.pvFloat) {
-				@Override
-				public void handleMessage(EpicsMessage dbrevent) throws IOException {
-					values.add(dbrevent.getNumberValue().floatValue());
-				}
-				@Override
-				public void putIntoValuesArray(PVFloatArray valuesArray, int totalValues) {
-		            valuesArray.put(0, totalValues, Floats.toArray(values), 0);
-				}
-			};
+			return new ScalarValueHandler<Float,PVFloatArray>(
+					ScalarType.pvFloat, 
+					(dbrevent, values) -> values.add(dbrevent.getNumberValue().floatValue()),
+					(values, valuesArray) -> valuesArray.put(0, values.size(), Floats.toArray(values), 0));
 		case SCALAR_INT:
-			return new ScalarValueHandler<Integer,PVIntArray>(ScalarType.pvInt) {
-				@Override
-				public void handleMessage(EpicsMessage dbrevent) throws IOException {
-					values.add(dbrevent.getNumberValue().intValue());
-				}
-				@Override
-				public void putIntoValuesArray(PVIntArray valuesArray, int totalValues) {
-		            valuesArray.put(0, totalValues, Ints.toArray(values), 0);
-				}
-			};
+			return new ScalarValueHandler<Integer,PVIntArray>(
+					ScalarType.pvInt, 
+					(dbrevent, values) -> values.add(dbrevent.getNumberValue().intValue()),
+					(values, valuesArray) -> valuesArray.put(0, values.size(), Ints.toArray(values), 0));
 		case SCALAR_SHORT:
-			return new ScalarValueHandler<Short,PVShortArray>(ScalarType.pvShort) {
-				@Override
-				public void handleMessage(EpicsMessage dbrevent) throws IOException {
-					values.add(dbrevent.getNumberValue().shortValue());
-				}
-				@Override
-				public void putIntoValuesArray(PVShortArray valuesArray, int totalValues) {
-		            valuesArray.put(0, totalValues, Shorts.toArray(values), 0);
-				}
-			};
+			return new ScalarValueHandler<Short,PVShortArray>(
+					ScalarType.pvShort,
+					(dbrevent, values) -> values.add(dbrevent.getNumberValue().shortValue()),
+					(values, valuesArray) -> valuesArray.put(0, values.size(), Shorts.toArray(values), 0));
 		case SCALAR_STRING:
-			return new ScalarValueHandler<String,PVStringArray>(ScalarType.pvString) {
-				@Override
-				public void handleMessage(EpicsMessage dbrevent) throws IOException {
-					values.add(dbrevent.getStringValue());
-				}
-				@Override
-				public void putIntoValuesArray(PVStringArray valuesArray, int totalValues) {
-		            valuesArray.put(0, totalValues, values.toArray(new String[0]), 0);
-				}
-			};
+			return new ScalarValueHandler<String,PVStringArray>(
+					ScalarType.pvString,
+					(dbrevent, values) -> values.add(dbrevent.getStringValue()),
+					(values, valuesArray) -> valuesArray.put(0, values.size(), values.toArray(new String[0]), 0));
 		case V4_GENERIC_BYTES:
-			break;
+			throw new UnsupportedOperationException();
 		case WAVEFORM_BYTE:
-			return new WaveformValueHandler<Byte,PVByte, PVByteArray>(ScalarType.pvByte) {
-				@Override
-				public Byte getSampleValueAt(EpicsMessage dbrevent, int index) throws IOException {
-					return dbrevent.getNumberAt(index).byteValue();
-				}
-
-				@Override
-				protected void putSamplesIntoStructure(PVByteArray sampleValues, List<Byte> srcValues) {
-					sampleValues.put(0, srcValues.size(), Bytes.toArray(srcValues), 0);				
-				}
-			};
+			return new WaveformValueHandler<Byte,PVByte, PVByteArray>(
+					ScalarType.pvByte,
+					(dbrevent, index) -> dbrevent.getNumberAt(index).byteValue(),
+					(sampleValues, srcValues) -> sampleValues.put(0, srcValues.size(), Bytes.toArray(srcValues), 0));
 		case WAVEFORM_DOUBLE:
-			return new WaveformValueHandler<Double,PVDouble, PVDoubleArray>(ScalarType.pvDouble) {
-				@Override
-				public Double getSampleValueAt(EpicsMessage dbrevent, int index) throws IOException {
-					return dbrevent.getNumberAt(index).doubleValue();
-				}
-
-				@Override
-				protected void putSamplesIntoStructure(PVDoubleArray sampleValues, List<Double> srcValues) {
-					sampleValues.put(0, srcValues.size(), Doubles.toArray(srcValues), 0);				
-				}
-			};
+			return new WaveformValueHandler<Double,PVDouble, PVDoubleArray>(
+					ScalarType.pvDouble,
+					(dbrevent, index) -> dbrevent.getNumberAt(index).doubleValue(),
+					(sampleValues, srcValues) -> sampleValues.put(0, srcValues.size(), Doubles.toArray(srcValues), 0));
 		case WAVEFORM_ENUM:
-			break;
+			return new WaveformValueHandler<Integer,PVInt, PVIntArray>(
+					ScalarType.pvInt,
+					(dbrevent, index) -> dbrevent.getNumberAt(index).intValue(),
+					(sampleValues, srcValues) -> sampleValues.put(0, srcValues.size(), Ints.toArray(srcValues), 0));
 		case WAVEFORM_FLOAT:
-			break;
+			return new WaveformValueHandler<Float,PVFloat, PVFloatArray>(
+					ScalarType.pvFloat,
+					(dbrevent, index) -> dbrevent.getNumberAt(index).floatValue(),
+					(sampleValues, srcValues) -> sampleValues.put(0, srcValues.size(), Floats.toArray(srcValues), 0));
 		case WAVEFORM_INT:
-			break;
+			return new WaveformValueHandler<Integer,PVInt, PVIntArray>(
+					ScalarType.pvInt,
+					(dbrevent, index) -> dbrevent.getNumberAt(index).intValue(),
+					(sampleValues, srcValues) -> sampleValues.put(0, srcValues.size(), Ints.toArray(srcValues), 0));
 		case WAVEFORM_SHORT:
-			break;
+			return new WaveformValueHandler<Short,PVShort, PVShortArray>(
+					ScalarType.pvShort,
+					(dbrevent, index) -> dbrevent.getNumberAt(index).shortValue(),
+					(sampleValues, srcValues) -> sampleValues.put(0, srcValues.size(), Shorts.toArray(srcValues), 0));
 		case WAVEFORM_STRING:
-			break;
+			throw new UnsupportedOperationException();
 		default:
 			break; 
 		}
@@ -532,8 +481,7 @@ public class FetchDataFromAppliance implements InfoChangeHandler  {
 			PayloadType.WAVEFORM_FLOAT,
 			PayloadType.WAVEFORM_INT,
 			PayloadType.WAVEFORM_SHORT,
-			PayloadType.WAVEFORM_STRING);
-
+			PayloadType.WAVEFORM_STRING);	
 }
 
 

@@ -5,7 +5,7 @@
 
     <path id="project.class.path">
 	    <pathelement location="bin" />
-	    <pathelement location="lib/pbrawclient-0.0.4.jar" />
+	    <pathelement location="lib/pbrawclient-0.0.5.jar" />
     	<pathelement location="lib/protobuf-java-2.4.1.jar" />
 	    <pathelement location="lib/pvAccessJava-4.1.2.jar" />
 	    <pathelement location="lib/pvDataJava-5.0.2.jar" />
