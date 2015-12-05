@@ -24,6 +24,7 @@ import org.epics.pvdata.factory.FieldFactory;
 import org.epics.pvdata.factory.PVDataFactory;
 import org.epics.pvdata.pv.Field;
 import org.epics.pvdata.pv.FieldCreate;
+import org.epics.pvdata.pv.PVByte;
 import org.epics.pvdata.pv.PVByteArray;
 import org.epics.pvdata.pv.PVDouble;
 import org.epics.pvdata.pv.PVDoubleArray;
@@ -476,7 +477,17 @@ public class FetchDataFromAppliance implements InfoChangeHandler  {
 		case V4_GENERIC_BYTES:
 			break;
 		case WAVEFORM_BYTE:
-			break;
+			return new WaveformValueHandler<Byte,PVByte, PVByteArray>(ScalarType.pvByte) {
+				@Override
+				public Byte getSampleValueAt(EpicsMessage dbrevent, int index) throws IOException {
+					return dbrevent.getNumberAt(index).byteValue();
+				}
+
+				@Override
+				protected void putSamplesIntoStructure(PVByteArray sampleValues, List<Byte> srcValues) {
+					sampleValues.put(0, srcValues.size(), Bytes.toArray(srcValues), 0);				
+				}
+			};
 		case WAVEFORM_DOUBLE:
 			return new WaveformValueHandler<Double,PVDouble, PVDoubleArray>(ScalarType.pvDouble) {
 				@Override
@@ -486,7 +497,7 @@ public class FetchDataFromAppliance implements InfoChangeHandler  {
 
 				@Override
 				protected void putSamplesIntoStructure(PVDoubleArray sampleValues, List<Double> srcValues) {
-					sampleValues.put(0, srcValues.size(), srcValues.stream().mapToDouble(Double::doubleValue).toArray(), 0);				
+					sampleValues.put(0, srcValues.size(), Doubles.toArray(srcValues), 0);				
 				}
 			};
 		case WAVEFORM_ENUM:
