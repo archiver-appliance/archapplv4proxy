@@ -27,7 +27,7 @@ public class V4ArchApplProxy
 	// factory object that will allow you to create the returned PVData object
 	// later.
 	//
-	private static Logger logger = LogManager.getLogger();
+	static Logger logger = LogManager.getLogger();
 
 	/**
 	 * Implementation of RPC service.
@@ -40,8 +40,7 @@ public class V4ArchApplProxy
 			this.serverRetrievalURL = serverRetrievalURL;
 		}
 		
-		public PVStructure request(PVStructure args) throws RPCRequestException
-		{
+		public PVStructure request(PVStructure args) throws RPCRequestException {
 			PVStructure query = args.getStructureField("query");
 			String pvName = query.getStringField("pv").get();
 			String start = query.getStringField("from").get();
@@ -89,7 +88,8 @@ public class V4ArchApplProxy
 			}
 		}
 	}
-
+	
+	
 	/**
 	 * Main is the entry point of the HelloService server side executable. 
 	 * @param args None
@@ -99,17 +99,21 @@ public class V4ArchApplProxy
 	{
 		if(args.length < 2) { 
 			System.err.println("Usage: java org.epics.archiverappliance.v4service.V4ArchApplProxy <serviceName> <serverRetrievalURL>");
-			System.err.println("For example: java org.epics.archiverappliance.v4service.V4ArchApplProxy archProxy http://archiver.facility.org/retrieval/data/getData.raw");
+			System.err.println("For example: java org.epics.archiverappliance.v4service.V4ArchApplProxy archProxy http://archiver.facility.org/retrieval/");
 			return;
 		}
 		
 		String serviceName = args[0];
 		String serverRetrievalURL = args[1];
+		if(!serverRetrievalURL.endsWith("/")) { 
+			serverRetrievalURL = serverRetrievalURL + "/";
+		}
 		
 		RPCServer server = new RPCServer();
 
 		// Register the service
-		server.registerService(serviceName, new ArchiverServiceImpl(serverRetrievalURL));
+		server.registerService(serviceName, new ArchiverServiceImpl(serverRetrievalURL + "data/getData.raw"));
+		server.registerService(serviceName+":search", new ArchiverNamesServiceImpl(serverRetrievalURL + "bpl/getMatchingPVs"));
 		
 		logger.info("Starting the EPICS archiver appliance proxy under the service name {} proxying the server {}", serviceName, serverRetrievalURL);
 		

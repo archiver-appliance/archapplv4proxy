@@ -13,5 +13,6 @@
 	<classpathentry kind="lib" path="lib/pvAccessJava-4.1.2.jar"/>
 	<classpathentry kind="lib" path="lib/pvDataJava-5.0.2.jar"/>
 	<classpathentry kind="lib" path="lib/pbrawclient-0.0.5.jar"/>
+	<classpathentry kind="lib" path="lib/json-simple-1.1.1.jar"/>
 	<classpathentry kind="output" path="build/classes"/>
 </classpath>
