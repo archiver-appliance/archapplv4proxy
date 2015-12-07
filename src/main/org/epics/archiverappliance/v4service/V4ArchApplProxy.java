@@ -4,9 +4,10 @@
  */
 package org.epics.archiverappliance.v4service;
 
+import java.util.LinkedHashMap;
+
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.epics.archiverappliance.v4service.FetchDataFromAppliance;
 import org.epics.pvaccess.PVAException;
 import org.epics.pvaccess.server.rpc.RPCRequestException;
 import org.epics.pvaccess.server.rpc.RPCServer;
@@ -31,11 +32,11 @@ public class V4ArchApplProxy
 	/**
 	 * Implementation of RPC service.
 	 */
-	static class HelloServiceImpl implements RPCService
+	static class ArchiverServiceImpl implements RPCService
 	{
 		private String serverRetrievalURL;
 		
-		public HelloServiceImpl(String serverRetrievalURL) { 
+		public ArchiverServiceImpl(String serverRetrievalURL) { 
 			this.serverRetrievalURL = serverRetrievalURL;
 		}
 		
@@ -46,17 +47,46 @@ public class V4ArchApplProxy
 			String start = query.getStringField("from").get();
 			String end = query.getStringField("to").get();
 			
-			logger.debug("Getting data for pv {} from {} to {}", pvName, start, end);
-			
-            try { 
-            	// Bulk of the work done in FetchDataFromAppliance
-            	FetchDataFromAppliance fetchData = new FetchDataFromAppliance(this.serverRetrievalURL, pvName, start, end);
-            	PVStructure result = fetchData.getData();
-            	return result;
-            } catch(Exception ex) { 
-            	logger.error("Exception fetching data from the appliance", ex);
-            	throw new RPCRequestException(StatusType.ERROR, "Exception fetching data", ex);
-            }
+
+			if(pvName != null) { 
+				if(pvName.contains(",")) {
+					// Multiple PV's, return as a PV structure array
+		            try { 
+		            	LinkedHashMap<String, PVStructure> resultStructures = new LinkedHashMap<String, PVStructure>();
+		            	String[] pvNames = pvName.split(",");
+		            	for(String multPVName : pvNames) { 
+			            	// Bulk of the work done in FetchDataFromAppliance
+			    			logger.debug("Getting data for pv {} from {} to {}", multPVName, start, end);
+			            	FetchDataFromAppliance fetchData = new FetchDataFromAppliance(this.serverRetrievalURL, multPVName, start, end);
+			            	PVStructure result = fetchData.getData();
+			            	if(result != null) { 
+			            		resultStructures.put(multPVName, result);
+			            	}
+		            	}
+		            	if(resultStructures.isEmpty()) { 
+		    				throw new RPCRequestException(StatusType.ERROR, "No data for any of the pvs");
+		            	} else { 
+			            	return FetchDataFromAppliance.createMultiplePVResultStructure(resultStructures);
+		            	}
+		            } catch(Exception ex) { 
+		            	logger.error("Exception fetching data from the appliance", ex);
+		            	throw new RPCRequestException(StatusType.ERROR, "Exception fetching data", ex);
+		            }
+				} else { 
+		            try { 
+		            	// Bulk of the work done in FetchDataFromAppliance
+		    			logger.debug("Getting data for pv {} from {} to {}", pvName, start, end);
+		            	FetchDataFromAppliance fetchData = new FetchDataFromAppliance(this.serverRetrievalURL, pvName, start, end);
+		            	PVStructure result = fetchData.getData();
+		            	return result;
+		            } catch(Exception ex) { 
+		            	logger.error("Exception fetching data from the appliance", ex);
+		            	throw new RPCRequestException(StatusType.ERROR, "Exception fetching data", ex);
+		            }
+				}
+			} else { 
+				throw new RPCRequestException(StatusType.ERROR, "Cannot determine PV name for getting history");
+			}
 		}
 	}
 
@@ -79,7 +109,7 @@ public class V4ArchApplProxy
 		RPCServer server = new RPCServer();
 
 		// Register the service
-		server.registerService(serviceName, new HelloServiceImpl(serverRetrievalURL));
+		server.registerService(serviceName, new ArchiverServiceImpl(serverRetrievalURL));
 		
 		logger.info("Starting the EPICS archiver appliance proxy under the service name {} proxying the server {}", serviceName, serverRetrievalURL);
 		

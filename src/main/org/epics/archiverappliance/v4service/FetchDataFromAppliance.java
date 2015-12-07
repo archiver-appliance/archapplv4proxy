@@ -10,6 +10,7 @@ import java.time.temporal.ChronoField;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.function.BiConsumer;
@@ -22,12 +23,15 @@ import org.epics.archiverappliance.retrieval.client.GenMsgIterator;
 import org.epics.archiverappliance.retrieval.client.InfoChangeHandler;
 import org.epics.archiverappliance.retrieval.client.RawDataRetrieval;
 import org.epics.pvaccess.server.rpc.RPCRequestException;
+import org.epics.pvdata.factory.ConvertFactory;
 import org.epics.pvdata.factory.FieldFactory;
 import org.epics.pvdata.factory.PVDataFactory;
+import org.epics.pvdata.pv.Convert;
 import org.epics.pvdata.pv.Field;
 import org.epics.pvdata.pv.FieldCreate;
 import org.epics.pvdata.pv.PVByte;
 import org.epics.pvdata.pv.PVByteArray;
+import org.epics.pvdata.pv.PVDataCreate;
 import org.epics.pvdata.pv.PVDouble;
 import org.epics.pvdata.pv.PVDoubleArray;
 import org.epics.pvdata.pv.PVFloat;
@@ -71,6 +75,9 @@ public class FetchDataFromAppliance implements InfoChangeHandler  {
 	String serverURL;
 	
 	private static final FieldCreate fieldCreate = FieldFactory.getFieldCreate();
+	private static final PVDataCreate pvDataCreate = PVDataFactory.getPVDataCreate();
+	private static final Convert pvDataConvert = ConvertFactory.getConvert();
+
 	
 	public FetchDataFromAppliance(String serverDataRetrievalURL, String pvName, String startStr, String endStr) throws ParseException {
 		this.serverURL = serverDataRetrievalURL;
@@ -209,7 +216,7 @@ public class FetchDataFromAppliance implements InfoChangeHandler  {
 			        			} 
 			        		);
 			
-			PVStructure result = PVDataFactory.getPVDataCreate().createPVStructure(resultStructure);
+			PVStructure result = pvDataCreate.createPVStructure(resultStructure);
 	
 			PVStringArray labelsArray = (PVStringArray) result.getScalarArrayField("labels",ScalarType.pvString);
 			labelsArray.put(0, columnNames.length, columnNames, 0);
@@ -228,7 +235,7 @@ public class FetchDataFromAppliance implements InfoChangeHandler  {
 			        			}
 			        		);
 			
-			PVStructure result = PVDataFactory.getPVDataCreate().createPVStructure(resultStructure);
+			PVStructure result = pvDataCreate.createPVStructure(resultStructure);
 			
 			PVStringArray namesArray = (PVStringArray) result.getScalarArrayField("channelName",ScalarType.pvString);
 			namesArray.put(0, 1, new String[] {pvName}, 0);
@@ -365,9 +372,9 @@ public class FetchDataFromAppliance implements InfoChangeHandler  {
 		public void putIntoValuesArray(PVUnionArray valuesArray, int totalValues) {
 			ArrayList<PVUnion> resultStructures = new ArrayList<PVUnion>(totalValues);
 			for(List<JavaType> srcValues : this.values) { 
-				PVUnion sampleValuesStructure = PVDataFactory.getPVDataCreate().createPVVariantUnion();
+				PVUnion sampleValuesStructure = pvDataCreate.createPVVariantUnion();
 				@SuppressWarnings("unchecked")
-				PVWaveformDataType sampleValues = (PVWaveformDataType) PVDataFactory.getPVDataCreate().createPVScalarArray(getValueType());
+				PVWaveformDataType sampleValues = (PVWaveformDataType) pvDataCreate.createPVScalarArray(getValueType());
 				putSamplesIntoStructureFunction.accept(sampleValues, srcValues);
 				sampleValuesStructure.set(sampleValues);
 				resultStructures.add(sampleValuesStructure);
@@ -388,7 +395,7 @@ public class FetchDataFromAppliance implements InfoChangeHandler  {
 	 * @throws IOException
 	 */
 	private ValueHandler determineValueHandler(PayloadInfo payloadInfo) throws IOException { 
-		// Bulk of this is boilerplate. Use the SCALAR_DOUBLE as an template.
+		// Bulk of this is boilerplate. Use the SCALAR_DOUBLE and WAVEFORM_DOUBLE as an template.
 		switch(payloadInfo.getType()) {
 		case SCALAR_DOUBLE:
 			return new ScalarValueHandler<Double, PVDoubleArray>(
@@ -481,7 +488,37 @@ public class FetchDataFromAppliance implements InfoChangeHandler  {
 			PayloadType.WAVEFORM_FLOAT,
 			PayloadType.WAVEFORM_INT,
 			PayloadType.WAVEFORM_SHORT,
-			PayloadType.WAVEFORM_STRING);	
+			PayloadType.WAVEFORM_STRING);
+	
+	/**
+	 * Return multiple PVStructure's in some kind of object for use when the request has multiple PV's
+	 * @return
+	 */
+	public static PVStructure createMultiplePVResultStructure(LinkedHashMap<String, PVStructure> results) { 
+		Structure finalResultStructure = fieldCreate.createStructure(
+				new String[] { "data"},
+                new Field[] { fieldCreate.createVariantUnionArray() });
+		
+		LinkedList<PVUnion> resultUnions = new LinkedList<PVUnion>();
+		
+		for(String pvName : results.keySet()) { 
+			PVStructure pvStruct = results.get(pvName);
+			Structure eachPVStruct = fieldCreate.createStructure(
+					new String[] { "pvName", "data"},
+	                new Field[] { fieldCreate.createScalar(ScalarType.pvString), fieldCreate.createStructure(pvStruct.getStructure()) });
+			PVStructure eachPVData = pvDataCreate.createPVStructure(eachPVStruct);
+			eachPVData.getStringField("pvName").put(pvName);
+			pvDataConvert.copyStructure(pvStruct, eachPVData.getStructureField("data"));
+			PVUnion resultUnion = pvDataCreate.createPVVariantUnion();
+			resultUnion.set(eachPVData);
+			resultUnions.add(resultUnion);
+		}
+		
+		PVStructure result = pvDataCreate.createPVStructure(finalResultStructure);
+		result.getUnionArrayField("data").put(0, resultUnions.size(), resultUnions.toArray(new PVUnion[0]), 0);
+		
+		return result;
+	}
 }
 
 
