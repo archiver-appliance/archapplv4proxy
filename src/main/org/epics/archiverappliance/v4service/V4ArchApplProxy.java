@@ -43,8 +43,8 @@ public class V4ArchApplProxy
 		public PVStructure request(PVStructure args) throws RPCRequestException {
 			PVStructure query = args.getStructureField("query");
 			String pvName = query.getStringField("pv").get();
-			String start = query.getStringField("from").get();
-			String end = query.getStringField("to").get();
+			String start = query.getStringField("from") != null ? query.getStringField("from").get() : null;
+			String end = query.getStringField("to") != null ? query.getStringField("to").get() : null;
 			
 
 			if(pvName != null) { 

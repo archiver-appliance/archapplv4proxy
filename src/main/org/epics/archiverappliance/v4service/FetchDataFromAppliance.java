@@ -3,10 +3,6 @@ package org.epics.archiverappliance.v4service;
 import java.io.IOException;
 import java.sql.Timestamp;
 import java.text.ParseException;
-import java.time.ZonedDateTime;
-import java.time.format.DateTimeFormatter;
-import java.time.format.DateTimeParseException;
-import java.time.temporal.ChronoField;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -82,8 +78,9 @@ public class FetchDataFromAppliance implements InfoChangeHandler  {
 	public FetchDataFromAppliance(String serverDataRetrievalURL, String pvName, String startStr, String endStr) throws ParseException {
 		this.serverURL = serverDataRetrievalURL;
 		this.pvName = pvName;
-		this.start = parseDateTime(startStr, TimeParsing.START);
-		this.end = parseDateTime(endStr, TimeParsing.END);
+		StartEndTime stendTime = StartEndTime.parse(startStr, endStr);
+		this.start = stendTime.getStartTimestamp();
+		this.end = stendTime.getEndTimestamp();
 	}
 
 	public PVStructure getData() throws Exception {
@@ -158,31 +155,6 @@ public class FetchDataFromAppliance implements InfoChangeHandler  {
 
 	@Override
 	public void handleInfoChange(PayloadInfo info) {
-	}
-	
-	private enum TimeParsing { 
-		START,
-		END
-	}
-	
-	/**
-	 * Handle the various forms of specifying the start and end times for the request.
-	 * @param timeStr
-	 * @param startOrEnd
-	 * @return
-	 */
-	private Timestamp parseDateTime(String timeStr, TimeParsing startOrEnd) {
-		try { 
-			DateTimeFormatter formatter = DateTimeFormatter.ISO_OFFSET_DATE_TIME;
-			ZonedDateTime dt = ZonedDateTime.parse(timeStr, formatter);
-			long epochSeconds = dt.getLong(ChronoField.INSTANT_SECONDS);
-			logger.debug("Epochseconds for {} is {}", timeStr, epochSeconds);
-			Timestamp ts = new Timestamp(epochSeconds*1000);
-			return ts;
-		} catch(DateTimeParseException ex) { 
-			logger.error("Exception parsing {}", timeStr, ex);
-			throw ex;
-		}
 	}
 	
 	/**
