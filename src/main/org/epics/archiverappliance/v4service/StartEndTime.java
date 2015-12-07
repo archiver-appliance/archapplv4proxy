@@ -56,7 +56,23 @@ public class StartEndTime {
 	public static StartEndTime parse(String startStr, String endStr) {
 		ZonedDateTime now = ZonedDateTime.now();
 		ZonedDateTime startOfShift = now.minusSeconds(8*60*60);
-		return new StartEndTime(startStr == null ? startOfShift : parseDateTime(startStr), endStr == null ? now : parseDateTime(endStr));
+		
+		if(startStr == null && endStr == null) { 
+			return new StartEndTime(startOfShift, now);
+		}
+		
+		// First parse the end time...
+		ZonedDateTime end = now;
+		if(endStr != null) {
+			end = parseDateTime(endStr); 
+		}
+		
+		ZonedDateTime start = end.minusSeconds(8*60*60);
+		if(startStr != null) { 
+			start = parseDateTime(startStr);
+		}
+
+		return new StartEndTime(start, end);
 	}
 
 	
