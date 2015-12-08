@@ -24,7 +24,7 @@
         <javac debug="true" deprecation="true" destdir="bin/main" srcdir="src/main">
             <classpath refid="project.class.path"/>
 	    </javac>
-        <!--javac debug="true" deprecation="true" destdir="bin/test" srcdir="src/test">
+        <javac debug="true" deprecation="true" destdir="bin/test" srcdir="src/test">
     	    <classpath>
     	    	<pathelement path="bin/main"/>
     	    	<pathelement path="bin/test"/>
@@ -33,7 +33,7 @@
     	          <include name="**/*.jar"/>
     	        </fileset>
     	    </classpath>
-	    </javac-->
+	    </javac>
     </target>
     
 	<target name="jar" depends="clean, compile">
@@ -78,7 +78,7 @@
 	  	<assertions>
 	  	  <enable/>
 	  	</assertions>
-	  	<jvmarg value="-Dlog4j.configurationFile=info_log4jconfig.xml"/>
+	  	<jvmarg value="-Dlog4j.configurationFile=debug_log4jconfig.xml"/>
 	  </junit>
 	</target>
 	

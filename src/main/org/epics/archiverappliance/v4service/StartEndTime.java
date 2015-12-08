@@ -1,11 +1,13 @@
 package org.epics.archiverappliance.v4service;
 
 import java.sql.Timestamp;
+import java.time.DayOfWeek;
 import java.time.Instant;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.time.temporal.ChronoField;
+import java.time.temporal.TemporalAdjusters;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.function.Function;
@@ -117,6 +119,7 @@ public class StartEndTime {
 	static { 
 		matchers.add(new PatternedMatcher("now", (timeStr) -> ZonedDateTime.now()));
 		matchers.add(new PatternedMatcher("yesterday", (timeStr) -> ZonedDateTime.now().minusDays(1)));
+		// 10 minutes ago and so on...
 		matchers.add(new TimeMatcher() {
 			private Pattern pattern = Pattern.compile("(\\d+) (\\w+) ago", Pattern.CASE_INSENSITIVE);
 			@Override
@@ -131,7 +134,7 @@ public class StartEndTime {
 					case "hours": case "hour": case "h": return ZonedDateTime.now().minusHours(amount);
 					case "days": case "day": case "d": return ZonedDateTime.now().minusDays(amount);
 					case "weeks": case "week": case "w": return ZonedDateTime.now().minusDays(7*amount);
-					case "months": case "mon": return ZonedDateTime.now().minusMonths(amount);
+					case "months": case "month": case "mon": return ZonedDateTime.now().minusMonths(amount);
 					case "years": case "year": case "y": return ZonedDateTime.now().minusYears(amount);
 					default:
 						throw new DateTimeParseException("Cannot parse decrements", timeStr, -1);
@@ -141,7 +144,45 @@ public class StartEndTime {
 			}
 		});
 		
-		
+		// 10 AM Tuesday etc..
+		matchers.add(new TimeMatcher() {
+			private Pattern pattern = Pattern.compile("([\\d:]+)(AM|PM) (today|yesterday|sunday|monday|tuesday|wednesday|thursday|friday|saturday|sun|mon|tue|wed|thur|thu|fri|sat)", Pattern.CASE_INSENSITIVE);
+			@Override
+			public ZonedDateTime parse(String timeStr) throws DateTimeParseException {
+				Matcher matcher = pattern.matcher(timeStr);
+				if(matcher.matches()) { 
+					logger.debug("At {} ~ {} ~ {}", matcher.group(1), matcher.group(2), matcher.group(3));
+					String time = matcher.group(1);
+					String ampm = matcher.group(2);
+					String datereference = matcher.group(3).toLowerCase();
+					ZonedDateTime specifiedDateTime = null;
+					switch(datereference) { 
+					case "today": specifiedDateTime = ZonedDateTime.now(); break;
+					case "yesterday": specifiedDateTime = ZonedDateTime.now().minusDays(1); break;
+					case "sunday": case "sun": specifiedDateTime = ZonedDateTime.now().with(TemporalAdjusters.previousOrSame(DayOfWeek.SUNDAY)); break;
+					case "monday": case "mon": specifiedDateTime = ZonedDateTime.now().with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY)); break;
+					case "tuesday": case "tue": specifiedDateTime = ZonedDateTime.now().with(TemporalAdjusters.previousOrSame(DayOfWeek.TUESDAY)); break;
+					case "wednesday": case "wed": specifiedDateTime = ZonedDateTime.now().with(TemporalAdjusters.previousOrSame(DayOfWeek.WEDNESDAY)); break;
+					case "thursday": case "thur": case "thu": specifiedDateTime = ZonedDateTime.now().with(TemporalAdjusters.previousOrSame(DayOfWeek.THURSDAY)); break;
+					case "friday": case "fri": specifiedDateTime = ZonedDateTime.now().with(TemporalAdjusters.previousOrSame(DayOfWeek.FRIDAY)); break;
+					case "saturday": case "sat": specifiedDateTime = ZonedDateTime.now().with(TemporalAdjusters.previousOrSame(DayOfWeek.SATURDAY)); break;
+					default:
+						throw new DateTimeParseException("Cannot parse at", timeStr, -1);
+					}
+					specifiedDateTime = specifiedDateTime.with(ChronoField.MINUTE_OF_HOUR, 0).with(ChronoField.SECOND_OF_MINUTE, 0);
+					String[] timeparts = time.split(":");
+					int fi = 0;
+					ChronoField[] fieldSequence = new ChronoField[] { ChronoField.HOUR_OF_AMPM, ChronoField.MINUTE_OF_HOUR, ChronoField.SECOND_OF_MINUTE };
+					for(String timepart : timeparts) { 
+						specifiedDateTime = specifiedDateTime.with(fieldSequence[fi], Long.parseLong(timepart));
+						fi++;
+					}
+					specifiedDateTime = specifiedDateTime.with(ChronoField.AMPM_OF_DAY, ampm.equalsIgnoreCase("AM") ? 0 : 1);
+					return specifiedDateTime;
+				}
+				return null;
+			}
+		});
 		
 		// Final matcher
 		matchers.add(new TimeMatcher() {
@@ -165,7 +206,7 @@ public class StartEndTime {
 	 * @param startOrEnd
 	 * @return
 	 */
-	private static ZonedDateTime parseDateTime(String timeStr)  throws DateTimeParseException {
+	public static ZonedDateTime parseDateTime(String timeStr)  throws DateTimeParseException {
 		for(TimeMatcher matcher : matchers) { 
 			ZonedDateTime ret = matcher.parse(timeStr);
 			if(ret != null) return ret;
