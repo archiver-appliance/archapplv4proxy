@@ -8,6 +8,7 @@ import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.time.temporal.ChronoField;
 import java.time.temporal.TemporalAdjusters;
+import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.function.Function;
@@ -183,8 +184,8 @@ public class StartEndTime {
 				return null;
 			}
 		});
-		
-		// Final matcher
+
+		// ISO 8601...
 		matchers.add(new TimeMatcher() {
 			@Override
 			public ZonedDateTime parse(String timeStr) throws DateTimeParseException {
@@ -193,10 +194,68 @@ public class StartEndTime {
 					ZonedDateTime dt = ZonedDateTime.parse(timeStr, formatter);
 					return dt;
 				} catch(DateTimeParseException ex) { 
-					logger.error("Exception parsing {}", timeStr, ex);
-					throw ex;
+					logger.debug("{} is not ISO 8601", timeStr);
+					return null;
 				}
 			} });
+
+
+		// Some free form formats...
+		// We first break the string down by spaces
+		// We look at each part and make some form of a guess as to what it could be.
+		matchers.add(new TimeMatcher() {
+			@Override
+			public ZonedDateTime parse(String timeStr) throws DateTimeParseException {
+				try {
+					ZonedDateTime specifiedDateTime = ZonedDateTime.now().with(ChronoField.HOUR_OF_DAY, 0).with(ChronoField.MINUTE_OF_HOUR, 0).with(ChronoField.SECOND_OF_MINUTE, 0);
+					String[] spaceParts = timeStr.split(" ");
+					for(String spacePart : spaceParts) {
+						if(spacePart.endsWith("AM") || spacePart.endsWith("am") || spacePart.endsWith("PM") || spacePart.endsWith("pm")) { 
+							logger.debug("Parsing time specification {}", spacePart);
+							if(spacePart.endsWith("PM") || spacePart.endsWith("pm")) { 
+								specifiedDateTime = specifiedDateTime.with(ChronoField.AMPM_OF_DAY, 1);
+							} else { 
+								specifiedDateTime = specifiedDateTime.with(ChronoField.AMPM_OF_DAY, 0);
+							}
+							String withoutAMPM = spacePart.substring(0, spacePart.length() - 2);
+							String[] timeparts = withoutAMPM.split(":");
+							int fi = 0;
+							ChronoField[] fieldSequence = new ChronoField[] { ChronoField.HOUR_OF_AMPM, ChronoField.MINUTE_OF_HOUR, ChronoField.SECOND_OF_MINUTE };
+							for(String timepart : timeparts) { 
+								specifiedDateTime = specifiedDateTime.with(fieldSequence[fi], Long.parseLong(timepart));
+								fi++;
+							}							
+						} else { 
+							try { 
+								int intPart = Integer.parseInt(spacePart);
+								// Yeah; kludgy I know...
+								if(intPart >= 2000) { 
+									logger.debug("We found the year part {}", spacePart);
+									specifiedDateTime = specifiedDateTime.with(ChronoField.YEAR, intPart);
+									continue;
+								} else if(intPart > 0 && intPart <= 31) { 
+									logger.debug("We found the day part {}", spacePart);
+									specifiedDateTime = specifiedDateTime.with(ChronoField.DAY_OF_MONTH, intPart);
+									continue;
+								} else { 
+									logger.error("Dont know what to do with int part {}", spacePart);
+								}
+							} catch(NumberFormatException ex) { 
+								logger.debug("{} is not an integer", spacePart);
+								if(month2monthId.keySet().contains(spacePart)) { 
+									specifiedDateTime = specifiedDateTime.with(ChronoField.MONTH_OF_YEAR, month2monthId.get(spacePart));
+								}
+							}
+						}
+					}	
+					return specifiedDateTime;
+				} catch(DateTimeParseException ex) { 
+					logger.debug("{} does not satisfy generic pattern 1", timeStr, ex);
+					return null;
+				}
+			} });
+		
+		// Final matcher
 	}
 	
 	
@@ -214,4 +273,32 @@ public class StartEndTime {
 		throw new DateTimeParseException("Cannot parse date time string ", timeStr, -1);
 	}
 
+	
+	static HashMap <String, Integer> month2monthId  = new HashMap<String, Integer>();
+	static { 
+		month2monthId.put("January", 1);
+		month2monthId.put("Jan", 1);
+		month2monthId.put("February", 2);
+		month2monthId.put("Feb", 2);
+		month2monthId.put("March", 3);
+		month2monthId.put("Mar", 3);
+		month2monthId.put("April", 4);
+		month2monthId.put("Apr", 4);
+		month2monthId.put("May", 5);
+		month2monthId.put("June", 6);
+		month2monthId.put("Jun", 6);
+		month2monthId.put("July", 7);
+		month2monthId.put("Jul", 7);
+		month2monthId.put("August", 8);
+		month2monthId.put("Aug", 8);
+		month2monthId.put("September", 9);
+		month2monthId.put("Sep", 9);
+		month2monthId.put("October", 10);
+		month2monthId.put("Oct", 10);
+		month2monthId.put("November", 11);
+		month2monthId.put("Nov", 11);
+		month2monthId.put("December", 12);
+		month2monthId.put("Dec", 12);
+	}
+	
 }
