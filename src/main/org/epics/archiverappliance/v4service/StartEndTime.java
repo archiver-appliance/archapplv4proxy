@@ -203,6 +203,7 @@ public class StartEndTime {
 		// Some free form formats...
 		// We first break the string down by spaces
 		// We look at each part and make some form of a guess as to what it could be.
+		// This is the final matcher as it is the most flexible; but this can make mistakes...
 		matchers.add(new TimeMatcher() {
 			@Override
 			public ZonedDateTime parse(String timeStr) throws DateTimeParseException {
@@ -254,8 +255,6 @@ public class StartEndTime {
 					return null;
 				}
 			} });
-		
-		// Final matcher
 	}
 	
 	
