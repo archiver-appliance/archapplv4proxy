@@ -40,10 +40,10 @@
         <tstamp>
             <format property="TODAY" pattern="MM/dd/yyyy HH:mm:ss"/>
         </tstamp>
-	    <manifestclasspath property="jar.manifestclasspath" jarfile="jar/v4archappl.jar">
+	    <manifestclasspath property="jar.manifestclasspath" jarfile="jar/archapplv4proxy.jar">
 		    <classpath refid="project.class.path"/>
 	    </manifestclasspath>
-        <jar compress="true" destfile="jar/v4archappl.jar" index="false">
+        <jar compress="true" destfile="jar/archapplv4proxy.jar" index="false">
             <manifest>
 				<attribute name="Built-By" value="${user.name}" />
 				<attribute name="Version" value=""/>
