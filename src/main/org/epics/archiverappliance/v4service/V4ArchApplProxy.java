@@ -22,12 +22,8 @@ import org.epics.pvdata.pv.Status.StatusType;
  */
 public class V4ArchApplProxy
 {
-
-	// All EPICS V4 services return PVData objects (by definition). Create the
-	// factory object that will allow you to create the returned PVData object
-	// later.
-	//
-	static Logger logger = LogManager.getLogger();
+	private static final Logger logger = LogManager.getLogger();
+	private RPCServer server;
 
 	/**
 	 * Implementation of RPC service.
@@ -103,23 +99,59 @@ public class V4ArchApplProxy
 			return;
 		}
 		
-		String serviceName = args[0];
-		String serverRetrievalURL = args[1];
+		V4ArchApplProxy proxy = new V4ArchApplProxy();
+		proxy.init(args);
+		
+	}
+	
+	
+
+    /**
+     * Method for jsvc - Apache Commons Daemon
+     * Here open configuration files, create a trace file, create ServerSockets, Threads
+     * @param arguments
+     */
+    public void init(String[] arguments) throws PVAException { 
+		String serviceName = arguments[0];
+		String serverRetrievalURL = arguments[1];
 		if(!serverRetrievalURL.endsWith("/")) { 
 			serverRetrievalURL = serverRetrievalURL + "/";
 		}
 		
-		RPCServer server = new RPCServer();
+		server = new RPCServer();
 
 		// Register the service
 		server.registerService(serviceName, new ArchiverServiceImpl(serverRetrievalURL + "data/getData.raw"));
 		server.registerService(serviceName+":search", new ArchiverNamesServiceImpl(serverRetrievalURL + "bpl/getMatchingPVs"));
-		
 		logger.info("Starting the EPICS archiver appliance proxy under the service name {} proxying the server {}", serviceName, serverRetrievalURL);
-		
-
+    }
+    
+    /**
+     * Method for jsvc - Apache Commons Daemon
+     * Start the Thread, accept incoming connections
+     * @param arguments
+     */
+    public void start() throws PVAException { 
 		server.printInfo();
 		server.run(0);
-	}
-	
+    }
+    
+    /**
+     * Method for jsvc - Apache Commons Daemon
+     * Inform the Thread to terminate the run(), close the ServerSockets
+     * @param arguments
+     */
+    public void stop() throws PVAException { 
+    	server.destroy(); 
+    	server = null;
+
+    }
+    
+    /**
+     * Method for jsvc - Apache Commons Daemon
+     * Destroy any object created in init()
+     * @param arguments
+     */
+    public void destroy() { 
+    }
 }
