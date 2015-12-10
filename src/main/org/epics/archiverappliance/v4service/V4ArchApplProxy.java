@@ -124,6 +124,7 @@ public class V4ArchApplProxy
 		server.registerService(serviceName, new ArchiverServiceImpl(serverRetrievalURL + "data/getData.raw"));
 		server.registerService(serviceName+":search", new ArchiverNamesServiceImpl(serverRetrievalURL + "bpl/getMatchingPVs"));
 		logger.info("Starting the EPICS archiver appliance proxy under the service name {} proxying the server {}", serviceName, serverRetrievalURL);
+		server.printInfo();
     }
     
     /**
@@ -132,8 +133,18 @@ public class V4ArchApplProxy
      * @param arguments
      */
     public void start() throws PVAException { 
-		server.printInfo();
-		server.run(0);
+		Thread launcherThread = new Thread(new Runnable() {
+			@Override
+			public void run() {
+				try { 
+					server.run(0);
+				} catch(PVAException ex) { 
+					logger.error("Exception starting service", ex);
+				}
+			}
+		});
+		launcherThread.setName("Launcher_Thread");
+		launcherThread.start();
     }
     
     /**

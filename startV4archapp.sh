@@ -26,7 +26,7 @@ fi
 
 [ -z "$LOGS_FOLDER" ] && echo "Please set the LOGS_FOLDER environment variable" && exit 1;
 [ -z "$JAVA_HOME" ] && echo "Please set the JAVA_HOME environment variable" && exit 1;
-if [ ${COMMAND} -ne "run" ]; then
+if [ ${COMMAND} != "run" ]; then
   [ -z "$COMMONS_DAEMON_FOLDER" ] && echo "Please set the COMMONS_DAEMON_FOLDER environment variable" && exit 1;
 fi
 
