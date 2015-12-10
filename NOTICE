@@ -1,6 +1,7 @@
 The EPICS Archiver Appliance V4 proxy uses open source libraries. Please see the attribution notices below.
 
 These components are included under the Apache 2.0 license (http://www.apache.org/licenses/LICENSE-2.0.txt), a local copy of which can be found in the file Apache_2.0_License.txt.
+commons-daemon-1.0.15.jar
 log4j-api-2.2.jar
 log4j-core-2.2.jar
 guava-18.0.jar

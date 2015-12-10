@@ -98,7 +98,8 @@ ${SCRIPT_DIR}/lib/pvDataJava-5.0.2.jar:\
 ${SCRIPT_DIR}/lib/log4j-api-2.2.jar:\
 ${SCRIPT_DIR}/lib/log4j-core-2.2.jar:\
 ${SCRIPT_DIR}/lib/guava-18.0.jar:\
-${SCRIPT_DIR}/lib/json-simple-1.1.1.jar:
+${SCRIPT_DIR}/lib/json-simple-1.1.1.jar:\
+${SCRIPT_DIR}/lib/commons-daemon-1.0.15.jar
 
 
 
