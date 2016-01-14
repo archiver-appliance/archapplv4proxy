@@ -55,10 +55,10 @@ JSVC_BIN=${COMMONS_DAEMON_FOLDER}/jsvc
 echo "Using jsvc (Apache Commons Daemon) located at ${JSVC_BIN}"
 
 HOSTNAME=`hostname`
-echo "Logs are being generated in the folder ${LOGS_FOLDER}"
 
 if [[ -z "$LOG_CONFIG_FILE" ]]
 then
+	echo "Logs are being generated in the folder ${LOGS_FOLDER}"
 	export LOG_CONFIG_FILE=${LOGS_FOLDER}/${HOSTNAME}_archappl_logconfig.xml
 	
 	# Generate the default log4j config file. This is production level logging by default.

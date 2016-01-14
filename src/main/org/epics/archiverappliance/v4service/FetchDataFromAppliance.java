@@ -39,6 +39,7 @@ import org.epics.pvdata.pv.PVScalar;
 import org.epics.pvdata.pv.PVScalarArray;
 import org.epics.pvdata.pv.PVShort;
 import org.epics.pvdata.pv.PVShortArray;
+import org.epics.pvdata.pv.PVString;
 import org.epics.pvdata.pv.PVStringArray;
 import org.epics.pvdata.pv.PVStructure;
 import org.epics.pvdata.pv.PVUnion;
@@ -46,6 +47,7 @@ import org.epics.pvdata.pv.PVUnionArray;
 import org.epics.pvdata.pv.ScalarType;
 import org.epics.pvdata.pv.Status.StatusType;
 import org.epics.pvdata.pv.Structure;
+import org.epics.pvdata.pv.Union;
 
 import com.google.common.primitives.Bytes;
 import com.google.common.primitives.Doubles;
@@ -152,72 +154,74 @@ public class FetchDataFromAppliance implements InfoChangeHandler  {
 			throw new RPCRequestException(StatusType.ERROR, "Exception getting data from the server", t);
 		}
 	}
-
 	@Override
 	public void handleInfoChange(PayloadInfo info) {
 	}
 	
 	/**
-	 * For scalars, return the data in an NTTable. For other types, Greg suggests we should use NTMultiChannel
-	 * @param payloadInfo
+	 * Both scalars and vectors are packed into a NTComplexTable
+	 *  NTComplexTable := 
+	 *  structure
+	 *  	string[]   labels              // Very short text describing each field below, i.e. column labels
+	 *  structure  value
+	 *    {union[] colname }0+ // 0 or more union arrays, each of which can be one of the following types.
+	 *      union
+	 *  	  NTScalar scalarValue   // Use for DBR_SCALAR…
+	 *  	  NTScalarArray scalarArrayValue // Use for DBR_WAVEFORM…
+	 *  	  NTNDArray ntndArrayValue // Use for areaDetector…
+	 *  	  NTComplexTable complextTableValue // Nested Complex Table for NoSQL types
+	 *  string     descriptor  : opt
+	 *  alarm_t    alarm       : opt
+	 *  time_t     timeStamp   : opt
+	 *
+ 	 * @param payloadInfo
 	 * @param valueHandler
 	 * @return
 	 */
-	private PVStructure createResultStructure(PayloadInfo payloadInfo, ValueHandler valueHandler) {
-
+	private PVStructure createResultStructure(PayloadInfo payloadInfo, ValueHandler valueHandler) throws RPCRequestException{
+		Union valueUnion = null;
 		if(scalarTypes.contains(payloadInfo.getType())) { 
-			// Create the result structure of the data interface.
-			String[] columnNames = new String[]{"secondsPastEpoch", "values", "nanoseconds", "severity", "status"};
-	
-			Structure valueStructure = fieldCreate.createStructure(
-					columnNames,
-					 new Field[] {
-			                fieldCreate.createScalarArray(ScalarType.pvLong),
-			                fieldCreate.createScalarArray(valueHandler.getValueType()),
-			                fieldCreate.createScalarArray(ScalarType.pvInt),
-			                fieldCreate.createScalarArray(ScalarType.pvInt),
-			                fieldCreate.createScalarArray(ScalarType.pvInt),
-			                }
-					);
-			Structure resultStructure =
-			        fieldCreate.createStructure( "epics:nt/NTTable:1.0",
-			                new String[] { "labels", "value" },
-			                new Field[] { 
-			        			fieldCreate.createScalarArray(ScalarType.pvString),
-			        			valueStructure 
-			        			} 
-			        		);
-			
-			PVStructure result = pvDataCreate.createPVStructure(resultStructure);
-	
-			PVStringArray labelsArray = (PVStringArray) result.getScalarArrayField("labels",ScalarType.pvString);
-			labelsArray.put(0, columnNames.length, columnNames, 0);
-			return result;
+			valueUnion = fieldCreate.createUnion(
+					new String[] {"scalarValue"}, 
+					new Field[] { fieldCreate.createScalar(valueHandler.getValueType())});
 		} else if(waveformTypes.contains(payloadInfo.getType())) { 
-			Structure resultStructure =
-			        fieldCreate.createStructure( "epics:nt/NTMultiChannel:1.0",
-			                new String[] { "value", "channelName", "severity", "status", "secondsPastEpoch", "nanoseconds" },
-			                new Field[] { 
-			                		fieldCreate.createVariantUnionArray(),
-			                		fieldCreate.createScalarArray(ScalarType.pvString),
-					                fieldCreate.createScalarArray(ScalarType.pvInt),
-					                fieldCreate.createScalarArray(ScalarType.pvInt),
-					                fieldCreate.createScalarArray(ScalarType.pvLong),
-					                fieldCreate.createScalarArray(ScalarType.pvInt)
-			        			}
-			        		);
-			
-			PVStructure result = pvDataCreate.createPVStructure(resultStructure);
-			
-			PVStringArray namesArray = (PVStringArray) result.getScalarArrayField("channelName",ScalarType.pvString);
-			namesArray.put(0, 1, new String[] {pvName}, 0);
+			valueUnion = fieldCreate.createUnion(
+					new String[] {"scalarArrayValue"}, 
+					new Field[] { fieldCreate.createScalarArray(valueHandler.getValueType())});
+		} else { 
+			String msg = "Cannot determine union type for " + payloadInfo.getType();
+			logger.error(msg);
+			throw new RPCRequestException(StatusType.ERROR, msg);
+		}
+	
+		
+		// Create the result structure of the data interface.
+		String[] columnNames = new String[]{"secondsPastEpoch", "values", "nanoseconds", "severity", "status"};
 
-			
-			return result;
-		}
-		else { 
-			return null;
-		}
+		Structure valueStructure = fieldCreate.createStructure(
+				columnNames,
+				 new Field[] {
+		                fieldCreate.createScalarArray(ScalarType.pvLong),
+		                fieldCreate.createUnionArray(valueUnion),
+		                fieldCreate.createScalarArray(ScalarType.pvInt),
+		                fieldCreate.createScalarArray(ScalarType.pvInt),
+		                fieldCreate.createScalarArray(ScalarType.pvInt),
+		                }
+				);
+		Structure resultStructure =
+		        fieldCreate.createStructure( "epics:nt/NTComplexTable:1.0",
+		                new String[] { "labels", "value" },
+		                new Field[] { 
+		        			fieldCreate.createScalarArray(ScalarType.pvString),
+		        			valueStructure 
+		        			} 
+		        		);
+		
+		PVStructure result = pvDataCreate.createPVStructure(resultStructure);
+
+		PVStringArray labelsArray = (PVStringArray) result.getScalarArrayField("labels",ScalarType.pvString);
+		labelsArray.put(0, columnNames.length, columnNames, 0);
+		return result;
 	}
 
 	/**
@@ -260,10 +264,10 @@ public class FetchDataFromAppliance implements InfoChangeHandler  {
 	private class ScalarValueHandler<JavaType, PVDataType> implements ValueHandler {
 		ScalarType valueType;
 		BiConsumer<EpicsMessage, List<JavaType>> handleMessageFunction;
-		BiConsumer<List<JavaType>, PVDataType> putIntoValuesFunction;
+		BiConsumer<JavaType, PVDataType> putIntoValuesFunction;
 		LinkedList<JavaType> values = new LinkedList<JavaType>();
 
-		public ScalarValueHandler(ScalarType valueType, BiConsumer<EpicsMessage, List<JavaType>> handleMessageFunction, BiConsumer<List<JavaType>, PVDataType> putIntoValuesFunction) {
+		public ScalarValueHandler(ScalarType valueType, BiConsumer<EpicsMessage, List<JavaType>> handleMessageFunction, BiConsumer<JavaType, PVDataType> putIntoValuesFunction) {
 			this.valueType = valueType;
 			this.handleMessageFunction = handleMessageFunction;
 			this.putIntoValuesFunction = putIntoValuesFunction;
@@ -283,8 +287,15 @@ public class FetchDataFromAppliance implements InfoChangeHandler  {
 		public void addToResult(PVStructure result, int totalValues) { 
 			PVStructure valuesStructure = result.getStructureField("value");
 			@SuppressWarnings("unchecked")
-			PVDataType valuesArray = (PVDataType) valuesStructure.getScalarArrayField("values",getValueType());
-            putIntoValuesFunction.accept(values, valuesArray);
+			PVUnionArray valuesArray = (PVUnionArray) valuesStructure.getUnionArrayField("values");
+			PVUnion[] unionArray = new PVUnion[totalValues];
+			for(int i = 0; i < totalValues; i++) {  
+				unionArray[i] = pvDataCreate.createPVUnion(valuesArray.getUnionArray().getUnion());
+				PVScalar valueScalar = pvDataCreate.createPVScalar(valueType);
+				putIntoValuesFunction.accept(values.get(i), (PVDataType) valueScalar);
+				unionArray[i].set("scalarValue", valueScalar);
+			}
+			valuesArray.put(0, unionArray.length, unionArray, 0);
 		}		
 		
 		@Override
@@ -370,40 +381,40 @@ public class FetchDataFromAppliance implements InfoChangeHandler  {
 		// Bulk of this is boilerplate. Use the SCALAR_DOUBLE and WAVEFORM_DOUBLE as an template.
 		switch(payloadInfo.getType()) {
 		case SCALAR_DOUBLE:
-			return new ScalarValueHandler<Double, PVDoubleArray>(
+			return new ScalarValueHandler<Double, PVDouble>(
 					ScalarType.pvDouble, 
 					(dbrevent, values) -> values.add(dbrevent.getNumberValue().doubleValue()),
-					(values, valuesArray) -> valuesArray.put(0, values.size(), Doubles.toArray(values), 0));
+					(value, valueScalar) -> valueScalar.put(value.doubleValue()));
 		case SCALAR_BYTE:
-			return new ScalarValueHandler<Byte,PVByteArray>(
+			return new ScalarValueHandler<Byte,PVByte>(
 					ScalarType.pvByte, 
 					(dbrevent, values) -> values.add(dbrevent.getNumberValue().byteValue()),
-					(values, valuesArray) -> valuesArray.put(0, values.size(), Bytes.toArray(values), 0));
+					(value, valueScalar) -> valueScalar.put(value.byteValue()));
 		case SCALAR_ENUM:
-			return new ScalarValueHandler<Integer,PVIntArray>(
+			return new ScalarValueHandler<Integer,PVInt>(
 					ScalarType.pvInt, 
 					(dbrevent, values) -> values.add(dbrevent.getNumberValue().intValue()),
-					(values, valuesArray) -> valuesArray.put(0, values.size(), Ints.toArray(values), 0));
+					(value, valueScalar) -> valueScalar.put(value.intValue()));
 		case SCALAR_FLOAT:
-			return new ScalarValueHandler<Float,PVFloatArray>(
+			return new ScalarValueHandler<Float,PVFloat>(
 					ScalarType.pvFloat, 
 					(dbrevent, values) -> values.add(dbrevent.getNumberValue().floatValue()),
-					(values, valuesArray) -> valuesArray.put(0, values.size(), Floats.toArray(values), 0));
+					(value, valueScalar) -> valueScalar.put(value.floatValue()));
 		case SCALAR_INT:
-			return new ScalarValueHandler<Integer,PVIntArray>(
+			return new ScalarValueHandler<Integer,PVInt>(
 					ScalarType.pvInt, 
 					(dbrevent, values) -> values.add(dbrevent.getNumberValue().intValue()),
-					(values, valuesArray) -> valuesArray.put(0, values.size(), Ints.toArray(values), 0));
+					(value, valueScalar) -> valueScalar.put(value.intValue()));
 		case SCALAR_SHORT:
-			return new ScalarValueHandler<Short,PVShortArray>(
+			return new ScalarValueHandler<Short,PVShort>(
 					ScalarType.pvShort,
 					(dbrevent, values) -> values.add(dbrevent.getNumberValue().shortValue()),
-					(values, valuesArray) -> valuesArray.put(0, values.size(), Shorts.toArray(values), 0));
+					(value, valueScalar) -> valueScalar.put(value.shortValue()));
 		case SCALAR_STRING:
-			return new ScalarValueHandler<String,PVStringArray>(
+			return new ScalarValueHandler<String,PVString>(
 					ScalarType.pvString,
 					(dbrevent, values) -> values.add(dbrevent.getStringValue()),
-					(values, valuesArray) -> valuesArray.put(0, values.size(), values.toArray(new String[0]), 0));
+					(value, valueScalar) -> valueScalar.put(value));
 		case V4_GENERIC_BYTES:
 			throw new UnsupportedOperationException();
 		case WAVEFORM_BYTE:
