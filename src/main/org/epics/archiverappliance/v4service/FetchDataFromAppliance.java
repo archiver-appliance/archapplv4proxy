@@ -124,11 +124,7 @@ public class FetchDataFromAppliance implements InfoChangeHandler  {
 				
 				valueHandler.addToResult(result, totalValues);
 				
-				PVStructure structureContainingTimeFields = result;
-				if(valueHandler.timeFieldsInValueStructure()) { 
-					logger.debug("The secondsPastEpoch and other fields are in the value structure for NTTable");
-					structureContainingTimeFields = result.getStructureField("value");
-				}
+				PVStructure structureContainingTimeFields = result.getStructureField("value");
 
 				PVLongArray epochSecondsArray = (PVLongArray) structureContainingTimeFields.getScalarArrayField("secondsPastEpoch",ScalarType.pvLong);
 				epochSecondsArray.put(0, totalValues, timeStamps.stream().mapToLong(Long::longValue).toArray(), 0);
@@ -243,14 +239,7 @@ public class FetchDataFromAppliance implements InfoChangeHandler  {
 		 * @param structure -  The result structure....
 		 * @param totalValues - The number of elements to stuff into the structure
 		 */
-		public void addToResult(PVStructure result, int totalValues);
-		
-		/**
-		 * There is a small difference between the NTTable and the NTMultiChannel in where the secondsPastEpoch, severity and status fields are
-		 * Return true if these fields are in the structure corresponding to the "value" field.
-		 * @return
-		 */
-		public boolean timeFieldsInValueStructure();
+		public void addToResult(PVStructure result, int totalValues);		
 	}
 
 	
@@ -297,11 +286,6 @@ public class FetchDataFromAppliance implements InfoChangeHandler  {
 			}
 			valuesArray.put(0, unionArray.length, unionArray, 0);
 		}		
-		
-		@Override
-		public boolean timeFieldsInValueStructure() { 
-			return true;
-		}
 	}
 
 	/**
@@ -342,32 +326,21 @@ public class FetchDataFromAppliance implements InfoChangeHandler  {
 		
 		@Override
 		public void addToResult(PVStructure result, int totalValues) {
-			PVUnionArray valuesArray = result.getUnionArrayField("value");
-			assert(valuesArray != null);
-            this.putIntoValuesArray(valuesArray, totalValues);
-		}
-		
-		/**
-		 * The final step into adding into PVDataType; for the primitives, we use Guava's bulk conversion.
-		 * @param valuesArray
-		 * @param totalValues
-		 */
-		public void putIntoValuesArray(PVUnionArray valuesArray, int totalValues) {
-			ArrayList<PVUnion> resultStructures = new ArrayList<PVUnion>(totalValues);
-			for(List<JavaType> srcValues : this.values) { 
-				PVUnion sampleValuesStructure = pvDataCreate.createPVVariantUnion();
+//			PVUnionArray valuesArray = result.getUnionArrayField("value");
+//			assert(valuesArray != null);
+//            this.putIntoValuesArray(valuesArray, totalValues);
+            
+			PVStructure valuesStructure = result.getStructureField("value");
+			PVUnionArray valuesArray = (PVUnionArray) valuesStructure.getUnionArrayField("values");
+			PVUnion[] unionArray = new PVUnion[totalValues];
+			for(int i = 0; i < totalValues; i++) {  
+				unionArray[i] = pvDataCreate.createPVUnion(valuesArray.getUnionArray().getUnion());
 				@SuppressWarnings("unchecked")
-				PVWaveformDataType sampleValues = (PVWaveformDataType) pvDataCreate.createPVScalarArray(getValueType());
-				putSamplesIntoStructureFunction.accept(sampleValues, srcValues);
-				sampleValuesStructure.set(sampleValues);
-				resultStructures.add(sampleValuesStructure);
+				PVWaveformDataType valueScalar = (PVWaveformDataType) pvDataCreate.createPVScalarArray(valueType);
+				putSamplesIntoStructureFunction.accept(valueScalar, values.get(i));
+				unionArray[i].set("scalarArrayValue", valueScalar);
 			}
-			valuesArray.put(0,  resultStructures.size(), resultStructures.toArray(new PVUnion[0]), 0);
-		}
-		
-		@Override
-		public boolean timeFieldsInValueStructure() { 
-			return false;
+			valuesArray.put(0, unionArray.length, unionArray, 0);
 		}
 	}
 
