@@ -261,7 +261,7 @@ public class FetchDataFromAppliance implements InfoChangeHandler  {
 	 * @param <JavaType> - This is the Java object type for the primitive - for example, Double for double
 	 * @param <PVDataType> - This is the PVData object type for the array result - for example PVDoubleArray for DBR_DOUBLE.
 	 */
-	private class ScalarValueHandler<JavaType, PVDataType> implements ValueHandler {
+	private class ScalarValueHandler<JavaType, PVDataType extends PVScalar> implements ValueHandler {
 		ScalarType valueType;
 		BiConsumer<EpicsMessage, List<JavaType>> handleMessageFunction;
 		BiConsumer<JavaType, PVDataType> putIntoValuesFunction;
@@ -286,13 +286,13 @@ public class FetchDataFromAppliance implements InfoChangeHandler  {
 		@Override
 		public void addToResult(PVStructure result, int totalValues) { 
 			PVStructure valuesStructure = result.getStructureField("value");
-			@SuppressWarnings("unchecked")
 			PVUnionArray valuesArray = (PVUnionArray) valuesStructure.getUnionArrayField("values");
 			PVUnion[] unionArray = new PVUnion[totalValues];
 			for(int i = 0; i < totalValues; i++) {  
 				unionArray[i] = pvDataCreate.createPVUnion(valuesArray.getUnionArray().getUnion());
-				PVScalar valueScalar = pvDataCreate.createPVScalar(valueType);
-				putIntoValuesFunction.accept(values.get(i), (PVDataType) valueScalar);
+				@SuppressWarnings("unchecked")
+				PVDataType valueScalar = (PVDataType) pvDataCreate.createPVScalar(valueType);
+				putIntoValuesFunction.accept(values.get(i), valueScalar);
 				unionArray[i].set("scalarValue", valueScalar);
 			}
 			valuesArray.put(0, unionArray.length, unionArray, 0);
