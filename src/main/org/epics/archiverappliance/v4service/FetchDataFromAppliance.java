@@ -341,7 +341,7 @@ public class FetchDataFromAppliance implements InfoChangeHandler  {
 	}
 
 	/**
-	 * Use the type information in the payloadInfo to construct a ValueHandler that can convert the DBR_TYPE into the corresponding PVScalar array
+	 * Use the type information in the payloadInfo to construct a ValueHandler that can convert the DBR_TYPE into the corresponding NTComplexTable union...
 	 * @param payloadInfo
 	 * @return
 	 * @throws IOException
