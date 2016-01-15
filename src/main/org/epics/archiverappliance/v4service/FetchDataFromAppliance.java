@@ -326,10 +326,6 @@ public class FetchDataFromAppliance implements InfoChangeHandler  {
 		
 		@Override
 		public void addToResult(PVStructure result, int totalValues) {
-//			PVUnionArray valuesArray = result.getUnionArrayField("value");
-//			assert(valuesArray != null);
-//            this.putIntoValuesArray(valuesArray, totalValues);
-            
 			PVStructure valuesStructure = result.getStructureField("value");
 			PVUnionArray valuesArray = (PVUnionArray) valuesStructure.getUnionArrayField("values");
 			PVUnion[] unionArray = new PVUnion[totalValues];
