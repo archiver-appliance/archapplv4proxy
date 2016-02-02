@@ -105,6 +105,7 @@ ${SCRIPT_DIR}/lib/commons-daemon-1.0.15.jar
 
 case $COMMAND in
 run)
+    export LOG_CONFIG_FILE=debug_log4jconfig.xml
 	java \
 		-Dlog4j.configurationFile=${LOG_CONFIG_FILE} \
 		-Xmx2G -XX:+UseG1GC \
