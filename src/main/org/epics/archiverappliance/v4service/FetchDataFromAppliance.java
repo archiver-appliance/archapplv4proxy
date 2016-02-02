@@ -217,7 +217,7 @@ public class FetchDataFromAppliance implements InfoChangeHandler  {
 	 */
 	private interface ValueHandler {
 		/**
-		 * Add the value from the event into whatever state is being used to collect the values
+		 * Add the value from the event into whatever collection is being used to collect the values
 		 * @param dbrevent
 		 */
 		public void handleMessage(EpicsMessage dbrevent) throws IOException;
@@ -237,21 +237,36 @@ public class FetchDataFromAppliance implements InfoChangeHandler  {
 	
 	/**
 	 * @author mshankar
-	 * Helper generic to handle the bulk of the DBR type boilerplate
+	 * Helper generic to handle the scalar DBR types
+	 * We collect values into the values LinkedList. 
+	 * Once we are done processing the entire response from the archiver, we stuff the values LinkedList into the final result.
 	 *
 	 * @param <JavaType> - This is the Java object type for the primitive - for example, Double for double
-	 * @param <PVDataType> - This is the PVData object type for the array result - for example PVDoubleArray for DBR_DOUBLE.
+	 * @param <PVDataType> - This is the PVScalar type for each sample - (for example PVDouble for DBR_DOUBLE).
+	 * @param <PVArrayType> - This is the PVArrayType (for example, PVDoubleArray for DBR_DOUBLE).
 	 */
 	private class ScalarValueHandler<JavaType, PVDataType extends PVScalar, PVArrayType extends PVScalarArray> implements ValueHandler {
 		ScalarType valueType;
-		BiConsumer<EpicsMessage, List<JavaType>> handleMessageFunction;
-		BiConsumer<PVArrayType, LinkedList<JavaType>> putIntoValuesFunction;
+		
+		/**
+		 * The sample values are collected in this list. 
+		 */
 		LinkedList<JavaType> values = new LinkedList<JavaType>();
 
-		public ScalarValueHandler(ScalarType valueType, BiConsumer<EpicsMessage, List<JavaType>> handleMessageFunction, BiConsumer<PVArrayType, LinkedList<JavaType>> putIntoValuesFunction) {
+		/**
+		 * Function to get the value from a archiver sample and stuff it into the values linkedlist above.
+		 */
+		BiConsumer<EpicsMessage, List<JavaType>> handleMessageFunction;
+		
+		/**
+		 * Function to stuff the values linkedlist into the final Result 
+		 */
+		BiConsumer<PVArrayType, LinkedList<JavaType>> putIntoFinalResult;
+
+		public ScalarValueHandler(ScalarType valueType, BiConsumer<EpicsMessage, List<JavaType>> handleMessageFunction, BiConsumer<PVArrayType, LinkedList<JavaType>> putIntoFinalResult) {
 			this.valueType = valueType;
 			this.handleMessageFunction = handleMessageFunction;
-			this.putIntoValuesFunction = putIntoValuesFunction;
+			this.putIntoFinalResult = putIntoFinalResult;
 		}
 
 		@Override
@@ -269,22 +284,40 @@ public class FetchDataFromAppliance implements InfoChangeHandler  {
 			PVStructure valuesStructure = result.getStructureField("value");
 			@SuppressWarnings("unchecked")
 			PVArrayType valuesArray = (PVArrayType) valuesStructure.getScalarArrayField("values", valueType);
-			putIntoValuesFunction.accept(valuesArray, values);
+			putIntoFinalResult.accept(valuesArray, values);
 		}		
 	}
 
 	/**
 	 * @author mshankar
-	 * Helper generic to handle the bulk of the DBR type boilerplate for waveforms of numbers
-	 *
+	 * Helper generic to handle waveform DBR types
+	 * We collect values into the values LinkedList. 
+	 * Once we are done processing the entire response from the archiver, we stuff the values LinkedList into the final result.
+	 * 
 	 * @param <JavaType> - This is the Java object type for the primitive - for example, Double for double
-	 * @param <PVDataType> - This is the PVData object type for the array result - for example PVDoubleArray for DBR_DOUBLE.
+	 * @param <PVDataType> - This is the PVScalar type for each sample - (for example PVDouble for DBR_DOUBLE).
+	 * @param <PVArrayType> - This is the PVArrayType (for example, PVDoubleArray for DBR_DOUBLE).
 	 */
 	private class WaveformValueHandler<JavaType, PVDataType extends PVScalar, PVWaveformDataType extends PVScalarArray> implements ValueHandler {
 		ScalarType valueType;
-		BiFunction<EpicsMessage, Integer, JavaType> getSampleValueAtFunction;
-		BiConsumer<PVWaveformDataType, List<JavaType>> putWaveformIntoSample;
+
+		/**
+		 * The sample values are collected in this list. 
+		 */
 		LinkedList<List<JavaType>> values = new LinkedList<List<JavaType>>();
+
+		/**
+		 * Function to get the value from a archiver sample.
+		 * This is processing a waveform; so we expect the value at the specified position in the waveform.
+		 * 
+		 */
+		BiFunction<EpicsMessage, Integer, JavaType> getSampleValueAtFunction;
+
+		/**
+		 * Function to stuff one of the entries from the values linkedList above into the result array.
+		 * For example, we'll put a List<Double> into a PVDoubleArray using this function. 
+		 */
+		BiConsumer<PVWaveformDataType, List<JavaType>> putWaveformIntoSample;
 
 		public WaveformValueHandler(ScalarType valueType, BiFunction<EpicsMessage, Integer, JavaType> getSampleValueAtFunction, BiConsumer<PVWaveformDataType, List<JavaType>> putWaveformIntoSample) {
 			this.valueType = valueType;
@@ -300,10 +333,10 @@ public class FetchDataFromAppliance implements InfoChangeHandler  {
 		@Override
 		// handleMessage is handled in the final implementation; the thrown IOException makes it difficult to use a lambda
 		public void handleMessage(EpicsMessage dbrevent) throws IOException { 
-			int totalEvents = dbrevent.getElementCount();
-			logger.debug("Adding {} events ", totalEvents);
+			int elementCount = dbrevent.getElementCount();
+			logger.debug("Adding {} events ", elementCount);
 			ArrayList<JavaType> sampleValues = new ArrayList<JavaType>();
-			for(int i = 0; i < totalEvents; i++) {
+			for(int i = 0; i < elementCount; i++) {
 				sampleValues.add(getSampleValueAtFunction.apply(dbrevent, i));
 			}
 			values.add(sampleValues);
@@ -313,17 +346,17 @@ public class FetchDataFromAppliance implements InfoChangeHandler  {
 		public void addToResult(PVStructure result, int totalValues) {
 			FieldBuilder fieldBuilder = fieldCreate.createFieldBuilder();
 			fieldBuilder.add("value", fieldCreate.createScalarArray(valueType));
-			Structure valueStructure = fieldBuilder.createStructure();
+			Structure eachSampleStructure = fieldBuilder.createStructure();
 			PVStructure valuesStructure = result.getStructureField("value");
 			PVStructureArray valuesArray = (PVStructureArray) valuesStructure.getStructureArrayField("values");
-			PVStructure[] structureArray = new PVStructure[totalValues];
+			PVStructure[] resultStructureArray = new PVStructure[totalValues];
 			for(int i = 0; i < totalValues; i++) {  
-				structureArray[i] = pvDataCreate.createPVStructure(valueStructure);
+				resultStructureArray[i] = pvDataCreate.createPVStructure(eachSampleStructure);
 				@SuppressWarnings("unchecked")
-				PVWaveformDataType valueScalar = (PVWaveformDataType) structureArray[i].getScalarArrayField("value", valueType);
+				PVWaveformDataType valueScalar = (PVWaveformDataType) resultStructureArray[i].getScalarArrayField("value", valueType);
 				putWaveformIntoSample.accept(valueScalar, values.get(i));
 			}
-			valuesArray.put(0, structureArray.length, structureArray, 0);
+			valuesArray.put(0, resultStructureArray.length, resultStructureArray, 0);
 		}
 	}
 
