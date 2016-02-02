@@ -44,6 +44,7 @@ public class TimeSpecTest {
 
 		tests.add(new TimeTest("now", ZonedDateTime.now(), 5));
 		tests.add(new TimeTest("yesterday", ZonedDateTime.now().minusDays(1), 5));
+		tests.add(new TimeTest("5 seconds ago", ZonedDateTime.now().minusSeconds(5), 1));
 		tests.add(new TimeTest("10 minutes ago", ZonedDateTime.now().minusMinutes(10), 5));
 		tests.add(new TimeTest("7 days ago", ZonedDateTime.now().minusDays(7), 5));
 		tests.add(new TimeTest("4 weeks ago", ZonedDateTime.now().minusDays(28), 5));

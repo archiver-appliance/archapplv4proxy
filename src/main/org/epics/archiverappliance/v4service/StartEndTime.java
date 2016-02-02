@@ -131,7 +131,8 @@ public class StartEndTime {
 					Integer amount = new Integer(matcher.group(1));
 					String units = matcher.group(2);
 					switch(units) { 
-					case "minutes": case "minute": case "min": case "m": return ZonedDateTime.now().minusMinutes(amount);
+					case "seconds": case "second": case "sec": case "secs": case "s": return ZonedDateTime.now().minusSeconds(amount);
+					case "minutes": case "minute": case "min": case "mins": case "m": return ZonedDateTime.now().minusMinutes(amount);
 					case "hours": case "hour": case "h": return ZonedDateTime.now().minusHours(amount);
 					case "days": case "day": case "d": return ZonedDateTime.now().minusDays(amount);
 					case "weeks": case "week": case "w": return ZonedDateTime.now().minusDays(7*amount);
