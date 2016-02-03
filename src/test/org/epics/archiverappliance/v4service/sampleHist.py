@@ -5,6 +5,9 @@ This currently has samples for scalars and waveforms.
 
 from pvaccess import *
 import argparse
+import datetime
+import pytz
+
 verbose = False
 
 def getHistoryData(pv):
@@ -23,8 +26,13 @@ def getHistoryData(pv):
         else:
             scalarValue = False
         numberOfSamples = len(secondsPastEpoch)
+        localTimeZone = pytz.timezone("America/Los_Angeles")
+        fmt = '%Y-%m-%d %H:%M:%S %Z%z'
         for i in range(numberOfSamples):
-            print "{0}.{1} --> {2}".format(secondsPastEpoch[i], nanos[i], values[i] if scalarValue else values[i]['value'])
+            sampleTs = datetime.datetime.fromtimestamp(secondsPastEpoch[i], pytz.utc)
+            localTs = sampleTs.astimezone(localTimeZone)
+            timeStr = localTs.strftime(fmt)
+            print "{0}.{1} --> {2}".format(timeStr, nanos[i], values[i] if scalarValue else values[i]['value'])
 
 
 if __name__ == "__main__":
