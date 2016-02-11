@@ -13,8 +13,6 @@ import java.util.List;
 import java.util.function.BiConsumer;
 import java.util.function.BiFunction;
 
-import javax.xml.bind.DatatypeConverter;
-
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.epics.archiverappliance.retrieval.client.EpicsMessage;
