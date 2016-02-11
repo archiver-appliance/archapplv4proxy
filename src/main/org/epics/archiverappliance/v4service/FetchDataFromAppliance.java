@@ -1,6 +1,7 @@
 package org.epics.archiverappliance.v4service;
 
 import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.sql.Timestamp;
 import java.text.ParseException;
 import java.util.ArrayList;
@@ -12,17 +13,22 @@ import java.util.List;
 import java.util.function.BiConsumer;
 import java.util.function.BiFunction;
 
+import javax.xml.bind.DatatypeConverter;
+
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.epics.archiverappliance.retrieval.client.EpicsMessage;
 import org.epics.archiverappliance.retrieval.client.GenMsgIterator;
 import org.epics.archiverappliance.retrieval.client.InfoChangeHandler;
 import org.epics.archiverappliance.retrieval.client.RawDataRetrieval;
+import org.epics.pvaccess.impl.remote.IntrospectionRegistry;
+import org.epics.pvaccess.impl.remote.SerializationHelper;
 import org.epics.pvaccess.server.rpc.RPCRequestException;
 import org.epics.pvdata.factory.ConvertFactory;
 import org.epics.pvdata.factory.FieldFactory;
 import org.epics.pvdata.factory.PVDataFactory;
 import org.epics.pvdata.pv.Convert;
+import org.epics.pvdata.pv.DeserializableControl;
 import org.epics.pvdata.pv.Field;
 import org.epics.pvdata.pv.FieldBuilder;
 import org.epics.pvdata.pv.FieldCreate;
@@ -54,6 +60,8 @@ import com.google.common.primitives.Doubles;
 import com.google.common.primitives.Floats;
 import com.google.common.primitives.Ints;
 import com.google.common.primitives.Shorts;
+import com.google.protobuf.ByteString;
+import com.google.protobuf.GeneratedMessage;
 
 import edu.stanford.slac.archiverappliance.PB.EPICSEvent.PayloadInfo;
 import edu.stanford.slac.archiverappliance.PB.EPICSEvent.PayloadType;
@@ -188,6 +196,13 @@ public class FetchDataFromAppliance implements InfoChangeHandler  {
 			.addArray("nanoseconds", ScalarType.pvInt)
 			.addArray("severity", ScalarType.pvInt)
 			.addArray("status", ScalarType.pvInt);
+		} else if(payloadInfo.getType() == PayloadType.V4_GENERIC_BYTES && valueHandler.getStructureType() != null) {
+			fieldBuilder
+			.addArray("secondsPastEpoch", ScalarType.pvLong)
+			.add("values", fieldCreate.createStructureArray(valueHandler.getStructureType()))
+			.addArray("nanoseconds", ScalarType.pvInt)
+			.addArray("severity", ScalarType.pvInt)
+			.addArray("status", ScalarType.pvInt);
 		} else { 
 			String msg = "Cannot determine union type for " + payloadInfo.getType();
 			logger.error(msg);
@@ -232,6 +247,13 @@ public class FetchDataFromAppliance implements InfoChangeHandler  {
 		 * @param totalValues - The number of elements to stuff into the structure
 		 */
 		public void addToResult(PVStructure result, int totalValues);		
+		
+		/**
+		 * For V4 generic types, return the type of structure that we'd use for the results.
+		 * For the scalar types, simply return null 
+		 * @return
+		 */
+		public Structure getStructureType();
 	}
 
 	
@@ -285,6 +307,11 @@ public class FetchDataFromAppliance implements InfoChangeHandler  {
 			@SuppressWarnings("unchecked")
 			PVArrayType valuesArray = (PVArrayType) valuesStructure.getScalarArrayField("values", valueType);
 			putIntoFinalResult.accept(valuesArray, values);
+		}
+
+		@Override
+		public Structure getStructureType() {
+			return null;
 		}		
 	}
 
@@ -358,7 +385,46 @@ public class FetchDataFromAppliance implements InfoChangeHandler  {
 			}
 			valuesArray.put(0, resultStructureArray.length, resultStructureArray, 0);
 		}
+
+		@Override
+		public Structure getStructureType() {
+			return null;
+		}
 	}
+	
+	private class V4GenericHandler implements ValueHandler {
+		LinkedList<PVStructure> values = new LinkedList<PVStructure>();
+		
+		@Override
+		public void handleMessage(EpicsMessage dbrevent) throws IOException {
+			GeneratedMessage message = dbrevent.getMessage();
+			ByteString byteString = (ByteString) message.getField(message.getDescriptorForType().findFieldByNumber(3));
+			PVStructure pvStructure = SerializationHelper.deserializeStructureFull(byteString.asReadOnlyByteBuffer(), new DummyDeserializationControl());
+			values.add(pvStructure);
+		}
+
+		@Override
+		public ScalarType getValueType() {
+			return null;
+		}
+
+		@Override
+		public void addToResult(PVStructure result, int totalValues) {
+			PVStructure valuesStructure = result.getStructureField("value");
+			PVStructureArray valuesArray = (PVStructureArray) valuesStructure.getStructureArrayField("values");
+			valuesArray.put(0, values.size(), values.toArray(new PVStructure[0]), 0);
+		}
+
+		@Override
+		public Structure getStructureType() {
+			if(!values.isEmpty()) { 
+				return values.get(0).getStructure();
+			}
+			return null;
+		}
+	}
+	
+	
 
 	/**
 	 * Use the type information in the payloadInfo to construct a ValueHandler that can convert the DBR_TYPE into the corresponding NTComplexTable union...
@@ -405,7 +471,7 @@ public class FetchDataFromAppliance implements InfoChangeHandler  {
 					(dbrevent, values) -> values.add(dbrevent.getStringValue()),
 					(sampleValues, srcValues) -> sampleValues.put(0, srcValues.size(), srcValues.toArray(new String[0]), 0));
 		case V4_GENERIC_BYTES:
-			throw new UnsupportedOperationException();
+			return new V4GenericHandler();
 		case WAVEFORM_BYTE:
 			return new WaveformValueHandler<Byte,PVByte, PVByteArray>(
 					ScalarType.pvByte,
@@ -491,6 +557,23 @@ public class FetchDataFromAppliance implements InfoChangeHandler  {
 		
 		return result;
 	}
+	
+    class DummyDeserializationControl implements DeserializableControl {
+    	protected final IntrospectionRegistry incomingIR = new IntrospectionRegistry();
+
+		@Override
+		public void alignData(int arg0) {
+		}
+
+		@Override
+		public Field cachedDeserialize(ByteBuffer buffer) {
+			return incomingIR.deserialize(buffer, this);
+		}
+
+		@Override
+		public void ensureData(int arg0) {
+		}        
+    }
 }
 
 
