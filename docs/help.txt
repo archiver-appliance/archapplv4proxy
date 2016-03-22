@@ -1,0 +1,50 @@
+
+The {SERVICE_NAME} service returns archive history from an EPICS archiver appliance.
+
+To get history for a PV, use 
+  eget -s {SERVICE_NAME} -a pv=<PVName> -a from=<StartTime> -a to=<EndTime>
+  
+For example, 
+  eget -s {SERVICE_NAME} -a pv=VPIO:IN20:111:VRAW -a from=2016-03-22T10:00:00.000Z -a to=2016-03-22T11:00:00.000Z
+  
+You can ask for histories for more than one PV using a comma separated list. For example,
+  eget -s {SERVICE_NAME} -a pv=VPIO:IN20:111:VRAW,CUD:MCC0:BPMSWF:WAVEFORM11 -a from=2016-03-22T10:00:00.000Z -a to=2016-03-22T11:00:00.000Z
+  
+You can skip the start and end times of the request. For example, this gets you data for a "standard" timeframe (typically a shift).
+  eget -s {SERVICE_NAME} -a pv=VPIO:IN20:111:VRAW
+ 
+By default, the "from" and "to" arguments expect ISO 8601 UTC datetimes
+  2011-12-03T10:15:30+01:00
+  2011-12-03T10:15:30-07:00
+  2011-12-03T10:15:30Z
+  2011-12-03T10:15:30.000Z
+
+However, these time formats are also possible
+  now
+  yesterday
+  5 seconds ago
+  10 minutes ago
+  7 days ago
+  4 weeks ago
+  1 month ago
+  10AM today
+  11PM Monday
+  Feb 10
+  Feb 10 2014
+  10 Feb 2014
+  Feb 10 11AM
+  Feb 10 11:15AM
+  Feb 10 11:15:43AM
+  Feb 10 11:15:43PM
+  
+
+You can also determine if a PV is being archived using the {SERVICE_NAME}:search service.
+
+For example, 
+  eget -s {SERVICE_NAME}:search -a pv='BPMS:LI30:*:YENERGYJITTER'
+or
+  eget -s {SERVICE_NAME}:search -a regex='BPMS:LI[0-9]{2}:701:YENERGYJITTER'
+
+The data is returned as NTComplexTable(s). To see a python sample, use
+  eget -s {SERVICE_NAME} -a help -a showpythonsample
+ 

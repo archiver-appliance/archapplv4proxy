@@ -12,6 +12,7 @@ import org.epics.pvaccess.PVAException;
 import org.epics.pvaccess.server.rpc.RPCRequestException;
 import org.epics.pvaccess.server.rpc.RPCServer;
 import org.epics.pvaccess.server.rpc.RPCService;
+import org.epics.pvdata.pv.PVString;
 import org.epics.pvdata.pv.PVStructure;
 import org.epics.pvdata.pv.Status.StatusType;
 
@@ -31,13 +32,24 @@ public class V4ArchApplProxy
 	static class ArchiverServiceImpl implements RPCService
 	{
 		private String serverRetrievalURL;
+		private String serviceName;
 		
-		public ArchiverServiceImpl(String serverRetrievalURL) { 
+		public ArchiverServiceImpl(String serviceName, String serverRetrievalURL) {
+			this.serviceName = serviceName;
 			this.serverRetrievalURL = serverRetrievalURL;
 		}
 		
 		public PVStructure request(PVStructure args) throws RPCRequestException {
 			PVStructure query = args.getStructureField("query");
+			
+			PVString userWantsHelp = query.getStringField("help");
+			if(userWantsHelp != null) {
+				PVString showPythonSample = query.getStringField("showpythonsample");
+				return FetchDataFromAppliance.getHelpMessage(serviceName, showPythonSample != null);
+			}
+			
+
+			
 			String pvName = query.getStringField("pv").get();
 			String start = query.getStringField("from") != null ? query.getStringField("from").get() : null;
 			String end = query.getStringField("to") != null ? query.getStringField("to").get() : null;
@@ -126,7 +138,7 @@ public class V4ArchApplProxy
 		server = new RPCServer();
 
 		// Register the service
-		server.registerService(serviceName, new ArchiverServiceImpl(serverRetrievalURL + "data/getData.raw"));
+		server.registerService(serviceName, new ArchiverServiceImpl(serviceName, serverRetrievalURL + "data/getData.raw"));
 		server.registerService(serviceName+":search", new ArchiverNamesServiceImpl(serverRetrievalURL + "bpl/getMatchingPVs"));
 		logger.info("Starting the EPICS archiver appliance proxy under the service name {} proxying the server {}", serviceName, serverRetrievalURL);
 		server.printInfo();

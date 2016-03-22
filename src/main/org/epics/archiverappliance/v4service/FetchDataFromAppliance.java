@@ -2,6 +2,9 @@ package org.epics.archiverappliance.v4service;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.sql.Timestamp;
 import java.text.ParseException;
 import java.util.ArrayList;
@@ -555,6 +558,38 @@ public class FetchDataFromAppliance implements InfoChangeHandler  {
 		
 		return result;
 	}
+	
+	
+	public static PVStructure getHelpMessage(String serviceName, boolean showPythonSample) { 
+		Path helpFilePath = Paths.get("./docs/help.txt");
+		Path pythonSamplePath = Paths.get("./src/test/org/epics/archiverappliance/v4service/sampleHist.py");
+		String helpMsg = "Cannot load help file from " + helpFilePath;
+		if(Files.exists(helpFilePath)) {
+			try { 
+				helpMsg = new String(Files.readAllBytes(helpFilePath));
+				helpMsg = helpMsg.replace("{SERVICE_NAME}", serviceName);
+
+				if(showPythonSample) {
+					logger.debug("Adding python sample to help");
+					if(Files.exists(pythonSamplePath)) { 
+						String pythonSample = new String(Files.readAllBytes(pythonSamplePath));
+						helpMsg = helpMsg + pythonSample;
+					} else { 
+						logger.error("Cannot load python sample from {}", pythonSamplePath.toAbsolutePath().toString());
+					}
+				}
+			} catch(Exception ex) {
+				logger.error("Cannot seem to find the help file {} ",  helpFilePath.toAbsolutePath().toString(), ex);
+			}
+		}
+
+		
+        Structure top = fieldCreate.createStructure("epics:nt/NTScalar:1.0", new String[] {"value"} , new Field[] {fieldCreate.createScalar(ScalarType.pvString)});
+        PVStructure pvTop = (PVStructure) pvDataCreate.createPVStructure(top);
+        pvTop.getStringField("value").put(helpMsg);
+		return pvTop;
+	}
+	
 	
     class DummyDeserializationControl implements DeserializableControl {
     	protected final IntrospectionRegistry incomingIR = new IntrospectionRegistry();
