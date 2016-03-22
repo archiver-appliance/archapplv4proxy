@@ -30,7 +30,7 @@ if [ ${COMMAND} != "run" ]; then
   [ -z "$COMMONS_DAEMON_FOLDER" ] && echo "Please set the COMMONS_DAEMON_FOLDER environment variable" && exit 1;
 fi
 
-# Startup script for the V4 directory service. Bulk of the configuration is done here.
+# Startup script for the V4 archiver service. Bulk of the configuration is done here.
 pushd `dirname $0`
 SCRIPT_DIR=`pwd`
 popd
@@ -108,6 +108,7 @@ run)
     export LOG_CONFIG_FILE=debug_log4jconfig.xml
 	java \
 		-Dlog4j.configurationFile=${LOG_CONFIG_FILE} \
+		-DhelpFolder=${SCRIPT_DIR}/docs \
 		-Xmx2G -XX:+UseG1GC \
 		-ea \
 		-cp ${AAV4PROXY_CLASSPATH} \
@@ -119,6 +120,7 @@ run)
 start)
 	${JSVC_BIN} \
 		-Dlog4j.configurationFile=${LOG_CONFIG_FILE} \
+		-DhelpFolder=${SCRIPT_DIR}/docs \
 		-Xmx2G -XX:+UseG1GC \
 		-cwd ${LOGS_FOLDER} \
 		-pidfile ${LOGS_FOLDER}/${HOSTNAME}_archappl_v4proxy.pid \
@@ -131,10 +133,11 @@ start)
 		${APPLIANCE_URL}
 	   	;;
 stop)
-	echo "Stopping the directory server"
+	echo "Stopping the V4 archiver server"
 	${JSVC_BIN} \
 		-stop \
 		-Dlog4j.configurationFile=${LOG_CONFIG_FILE} \
+		-DhelpFolder=${SCRIPT_DIR}/docs \
 		-Xmx2G -XX:+UseG1GC \
 		-cwd ${LOGS_FOLDER} \
 		-pidfile ${LOGS_FOLDER}/${HOSTNAME}_archappl_v4proxy.pid \

@@ -561,8 +561,9 @@ public class FetchDataFromAppliance implements InfoChangeHandler  {
 	
 	
 	public static PVStructure getHelpMessage(String serviceName, boolean showPythonSample) { 
-		Path helpFilePath = Paths.get("./docs/help.txt");
-		Path pythonSamplePath = Paths.get("./src/test/org/epics/archiverappliance/v4service/sampleHist.py");
+		String helpFolder = System.getProperty("helpFolder", ".");
+		Path helpFilePath = Paths.get(helpFolder, "help.txt");
+		Path pythonSamplePath = Paths.get(helpFolder, "../src/test/org/epics/archiverappliance/v4service/sampleHist.py");
 		String helpMsg = "Cannot load help file from " + helpFilePath;
 		if(Files.exists(helpFilePath)) {
 			try { 
