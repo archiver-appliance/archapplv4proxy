@@ -59,7 +59,8 @@ public class V4ArchApplProxy
 			            	}
 		            	}
 		            	if(resultStructures.isEmpty()) { 
-		    				throw new RPCRequestException(StatusType.ERROR, "No data for any of the pvs");
+		            		logger.error("No data found for any of the PV's in the request {}", String.join(",", pvNames));
+		    				throw new RPCRequestException(StatusType.ERROR, "The PV's " + String.join(",", pvNames) + " are not being archived.");
 		            	} else { 
 			            	return FetchDataFromAppliance.createMultiplePVResultStructure(resultStructures);
 		            	}
@@ -73,6 +74,10 @@ public class V4ArchApplProxy
 		    			logger.debug("Getting data for pv {} from {} to {}", pvName, start, end);
 		            	FetchDataFromAppliance fetchData = new FetchDataFromAppliance(this.serverRetrievalURL, pvName, start, end);
 		            	PVStructure result = fetchData.getData();
+		            	if(result == null) { 
+		            		logger.error("No data found for PV {}", String.join(",", pvName));
+		    				throw new RPCRequestException(StatusType.ERROR, "The PV " + pvName + " is not being archived.");
+		            	}
 		            	return result;
 		            } catch(Exception ex) { 
 		            	logger.error("Exception fetching data from the appliance", ex);
