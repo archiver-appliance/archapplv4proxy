@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 
+import org.epics.pvaccess.ClientFactory;
 import org.epics.pvaccess.client.rpc.RPCClient;
 import org.epics.pvaccess.client.rpc.RPCClientFactory;
 import org.epics.pvaccess.server.rpc.RPCRequestException;
@@ -45,6 +46,7 @@ public class FilterClient {
 			
 		} finally { 
 			client.destroy();
+			ClientFactory.stop();
 		}
 	}
 
