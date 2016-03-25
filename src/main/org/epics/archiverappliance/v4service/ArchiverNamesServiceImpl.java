@@ -22,6 +22,12 @@ import org.json.simple.JSONArray;
 import org.json.simple.parser.JSONParser;
 import org.json.simple.parser.ParseException;
 
+/**
+ * Names of PV's that are being archived etc
+ * Support a pv=glob or regex=pattern arguments.
+ * @author mshankar
+ *
+ */
 class ArchiverNamesServiceImpl implements RPCService {
 	private static final Logger logger = LogManager.getLogger();
 	private String serverRetrievalURL;
