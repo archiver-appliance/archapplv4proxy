@@ -213,7 +213,7 @@ public class FetchDataFromAppliance implements InfoChangeHandler  {
 		
 		// Create the result structure of the data interface.
 		Structure resultStructure =
-		        fieldCreate.createStructure( "epics:nt/NTComplexTable:1.0",
+		        fieldCreate.createStructure( "NTComplexTable",
 		                new String[] { "labels", "value" },
 		                new Field[] { 
 		        			fieldCreate.createScalarArray(ScalarType.pvString),
@@ -535,7 +535,7 @@ public class FetchDataFromAppliance implements InfoChangeHandler  {
 	 */
 	public static PVStructure createMultiplePVResultStructure(LinkedHashMap<String, PVStructure> results) { 
 		Structure finalResultStructure = fieldCreate.createStructure(
-				new String[] { "data"},
+				new String[] { "value"},
                 new Field[] { fieldCreate.createVariantUnionArray() });
 		
 		LinkedList<PVUnion> resultUnions = new LinkedList<PVUnion>();
@@ -543,18 +543,18 @@ public class FetchDataFromAppliance implements InfoChangeHandler  {
 		for(String pvName : results.keySet()) { 
 			PVStructure pvStruct = results.get(pvName);
 			Structure eachPVStruct = fieldCreate.createStructure(
-					new String[] { "pvName", "data"},
+					new String[] { "pvName", "value"},
 	                new Field[] { fieldCreate.createScalar(ScalarType.pvString), fieldCreate.createStructure(pvStruct.getStructure()) });
 			PVStructure eachPVData = pvDataCreate.createPVStructure(eachPVStruct);
 			eachPVData.getStringField("pvName").put(pvName);
-			pvDataConvert.copyStructure(pvStruct, eachPVData.getStructureField("data"));
+			pvDataConvert.copyStructure(pvStruct, eachPVData.getStructureField("value"));
 			PVUnion resultUnion = pvDataCreate.createPVVariantUnion();
 			resultUnion.set(eachPVData);
 			resultUnions.add(resultUnion);
 		}
 		
 		PVStructure result = pvDataCreate.createPVStructure(finalResultStructure);
-		result.getUnionArrayField("data").put(0, resultUnions.size(), resultUnions.toArray(new PVUnion[0]), 0);
+		result.getUnionArrayField("value").put(0, resultUnions.size(), resultUnions.toArray(new PVUnion[0]), 0);
 		
 		return result;
 	}
