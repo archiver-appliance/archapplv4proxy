@@ -140,7 +140,7 @@ public class V4ArchApplProxy
 		// Register the service
 		server.registerService(serviceName, new ArchiverServiceImpl(serviceName, serverRetrievalURL + "data/getData.raw"));
 		server.registerService(serviceName+":search", new ArchiverNamesServiceImpl(serverRetrievalURL + "bpl/getMatchingPVs"));
-		server.registerService(serviceName+":filter", new ArchiverNamesFilterServiceImpl(serverRetrievalURL + "bpl/archivedPVs"));
+		server.registerService(serviceName+":filter", new ArchiverNamesFilterServiceImpl(serverRetrievalURL + "bpl/filterArchivedPVs"));
 		logger.info("Starting the EPICS archiver appliance proxy under the service name {} proxying the server {}", serviceName, serverRetrievalURL);
 		server.printInfo();
     }
