@@ -32,15 +32,21 @@ public class FilterClientAsync implements RPCClientRequester {
 	private static final PVDataCreate pvDataCreate = PVDataFactory.getPVDataCreate();
 	
 	private String fileWithPVNames;
-	private CountDownLatch latch = new CountDownLatch(1);
+	private boolean connected = false;
+	private CountDownLatch latch;
 
 
 	public static void main(String[] args) throws Exception {
 		FilterClientAsync theRequester = new FilterClientAsync();
 		theRequester.fileWithPVNames = args[1];
 		RPCClient client = RPCClientFactory.create(args[0] + ":filter", theRequester);
+		theRequester.latch = new CountDownLatch(100);
 		try {
-			System.out.println("Send the request across on thread " + Thread.currentThread().getName());
+			for(int i = 0; i < 100; i++) { 
+				System.out.println("Send the request across on thread " + Thread.currentThread().getName());
+				theRequester.issueRequest(client);
+				Thread.sleep(100);
+			}
 			theRequester.latch.await(20, TimeUnit.SECONDS);
 		} finally { 
 			client.destroy();
@@ -64,6 +70,14 @@ public class FilterClientAsync implements RPCClientRequester {
 	@Override
 	public void connectResult(RPCClient client, Status status) {
 		if(status.isOK()) {
+			this.connected = true;
+		} else { 
+			this.connected = false;
+		}
+	}
+	
+	public void issueRequest(RPCClient client) { 
+		if(this.connected) { 
 			try { 
 				String[] pvNames = Files.readAllLines(Paths.get(fileWithPVNames)).toArray(new String[0]);
 				FieldBuilder fieldBuilder = fieldCreate.createFieldBuilder();
@@ -75,6 +89,9 @@ public class FilterClientAsync implements RPCClientRequester {
 			} catch(IOException ex) { 
 				ex.printStackTrace();
 			}
+		} else { 
+			System.out.println("Not connected; so not issuing request");
+			latch.countDown();
 		}
 	}
 
