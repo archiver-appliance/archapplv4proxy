@@ -24,17 +24,20 @@ if [ $# -ne 3 ]; then
     exit 1
 fi
 
-[ -z "$LOGS_FOLDER" ] && echo "Please set the LOGS_FOLDER environment variable" && exit 1;
-[ -z "$JAVA_HOME" ] && echo "Please set the JAVA_HOME environment variable" && exit 1;
-if [ ${COMMAND} != "run" ]; then
-  [ -z "$COMMONS_DAEMON_FOLDER" ] && echo "Please set the COMMONS_DAEMON_FOLDER environment variable" && exit 1;
-fi
-
 # Startup script for the V4 archiver service. Bulk of the configuration is done here.
 pushd `dirname $0`
 SCRIPT_DIR=`pwd`
 popd
 echo "Running the EPICS Archiver Appliance V4 proxy from ${SCRIPT_DIR}"
+
+if [[ -z "$LOGS_FOLDER" ]]
+then
+  LOGS_FOLDER=.
+  if [[ ! -z ${PHYSICS_DATA} ]]
+  then
+    LOGS_FOLDER=${PHYSICS_DATA}/log
+  fi
+fi
 
 
 [ -z "$PACKAGE_TOP" ] && export PACKAGE_TOP="/afs/slac/g/lcls/package"
@@ -53,6 +56,14 @@ java -version
 
 JSVC_BIN=${COMMONS_DAEMON_FOLDER}/jsvc
 echo "Using jsvc (Apache Commons Daemon) located at ${JSVC_BIN}"
+
+[ -z "$LOGS_FOLDER" ] && echo "Please set the LOGS_FOLDER environment variable" && exit 1;
+[ -z "$JAVA_HOME" ] && echo "Please set the JAVA_HOME environment variable" && exit 1;
+if [ ${COMMAND} != "run" ]; then
+  [ -z "$COMMONS_DAEMON_FOLDER" ] && echo "Please set the COMMONS_DAEMON_FOLDER environment variable" && exit 1;
+fi
+
+
 
 HOSTNAME=`hostname`
 
