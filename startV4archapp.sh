@@ -49,11 +49,14 @@ else
   ARCH="linux-x86"
 fi
 
+[ -z "$JAVA_HOME" ] && export JAVA_HOME=/afs/slac/g/lcls/package/java/jdk1.8.0_60/${ARCH}
 export PATH=${JAVA_HOME}/bin:${PATH}
 
 echo "Using java in folder ${JAVA_HOME}"
 java -version
 
+
+[ -z "$COMMONS_DAEMON_FOLDER" ] && COMMONS_DAEMON_FOLDER=${PACKAGE_TOP}/commons-daemon/1.0.15/${ARCH}
 JSVC_BIN=${COMMONS_DAEMON_FOLDER}/jsvc
 echo "Using jsvc (Apache Commons Daemon) located at ${JSVC_BIN}"
 
