@@ -49,7 +49,7 @@ else
   ARCH="linux-x86"
 fi
 
-[ -z "$JAVA_HOME" ] && export JAVA_HOME=/afs/slac/g/lcls/package/java/jdk1.8.0_60/${ARCH}
+export JAVA_HOME=/afs/slac/g/lcls/package/java/jdk1.8.0_60/${ARCH}
 export PATH=${JAVA_HOME}/bin:${PATH}
 
 echo "Using java in folder ${JAVA_HOME}"
